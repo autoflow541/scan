@@ -17,15 +17,16 @@ services:
     runtime: docker
     dockerfilePath: ./docker/Dockerfile
     dockerContext: .
-    # Each scan launches a real Chromium process -- Render's free plan
-    # (512MB RAM) can run this but may need MAX_CONCURRENT_SCANS=1 to avoid
-    # OOM kills under concurrent load. "starter" (paid, more RAM) is safer
-    # for anything beyond light/occasional traffic; change the plan field
-    # to "free" to try the free tier first.
-    plan: starter
+    # Free tier (512MB RAM) -- no payment info required to deploy. Each scan
+    # launches a real Chromium process, so MAX_CONCURRENT_SCANS is capped at
+    # 1 here to avoid OOM kills under concurrent load. Free instances also
+    # spin down after 15 min idle (cold start ~30-60s on the next request).
+    # If traffic grows, switch this to "starter" (paid, more RAM, no
+    # spin-down) in the Render dashboard -- no code change needed.
+    plan: free
     healthCheckPath: /health
     envVars:
       - key: CORS_ORIGINS
         value: "*"
       - key: MAX_CONCURRENT_SCANS
-        value: "2"
+        value: "1"
