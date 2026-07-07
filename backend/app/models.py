@@ -28,6 +28,24 @@ class Issue(BaseModel):
     nodes: list[IssueNode]
 
 
+class PassItem(BaseModel):
+    id: str
+    wcag_criterion: str | None = None
+    tags: list[str]
+    description: str
+    help: str
+    help_url: str
+    node_count: int
+
+
+class ConformanceRow(BaseModel):
+    criterion: str
+    status: str  # "supports" | "does_not_support" | "needs_review"
+    passed_rules: list[str]
+    failed_rules: list[str]
+    review_rules: list[str]
+
+
 class ScanResult(BaseModel):
     url: str
     final_url: str
@@ -36,5 +54,7 @@ class ScanResult(BaseModel):
     score: int
     counts: dict[str, int] = Field(default_factory=dict)
     issues: list[Issue]
+    passes: list[PassItem]
+    conformance: list[ConformanceRow]
     incomplete_count: int
     scan_duration_ms: int

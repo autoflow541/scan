@@ -13,7 +13,8 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 from .axe_source import load_axe_source
-from .models import Issue, IssueNode, ScanResult
+from .conformance import build_conformance
+from .models import ConformanceRow, Issue, IssueNode, PassItem, ScanResult
 from .scoring import compute_score
 from .url_safety import revalidate_landed_host, safe_resolve_target
 from .wcag_map import primary_criterion
@@ -28,7 +29,7 @@ _USER_AGENT = "AutoFlowAccessibilityScanner/1.0 (+https://scan.auto-flow.co)"
 _AXE_RUN_SCRIPT = """
 async () => {
   return await axe.run(document, {
-    resultTypes: ["violations", "incomplete"],
+    resultTypes: ["violations", "passes", "incomplete"],
     runOnly: { type: "tag", values: %s },
   });
 }
@@ -124,6 +125,7 @@ def _build_scan_result(
     duration_ms: int,
 ) -> ScanResult:
     violations = axe_results.get("violations", [])
+    passes = axe_results.get("passes", [])
     incomplete = axe_results.get("incomplete", [])
 
     counts = {"critical": 0, "serious": 0, "moderate": 0, "minor": 0}
@@ -153,6 +155,21 @@ def _build_scan_result(
             )
         )
 
+    pass_items = [
+        PassItem(
+            id=p.get("id", ""),
+            wcag_criterion=primary_criterion(p.get("tags", [])),
+            tags=p.get("tags", []),
+            description=p.get("description", ""),
+            help=p.get("help", ""),
+            help_url=p.get("helpUrl", ""),
+            node_count=len(p.get("nodes", [])),
+        )
+        for p in sorted(passes, key=lambda p: p.get("id", ""))
+    ]
+
+    conformance = [ConformanceRow(**row) for row in build_conformance(violations, passes, incomplete)]
+
     return ScanResult(
         url=requested_url,
         final_url=final_url,
@@ -161,6 +178,8 @@ def _build_scan_result(
         score=compute_score(violations),
         counts=counts,
         issues=issues,
+        passes=pass_items,
+        conformance=conformance,
         incomplete_count=len(incomplete),
         scan_duration_ms=duration_ms,
     )

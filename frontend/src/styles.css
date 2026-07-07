@@ -25,6 +25,8 @@
   --moderate-bg:  #fff9d6;
   --minor:        #5a4030;
   --minor-bg:     #f3ece0;
+  --supports:     #2a6b3f;
+  --supports-bg:  #eaf5ee;
   --font-display: 'Atkinson Hyperlegible', system-ui, sans-serif;
   --font-body:    'Atkinson Hyperlegible', system-ui, sans-serif;
   --radius:       8px;
@@ -146,6 +148,39 @@ a { color: var(--accent-deep); }
 .issue-node code { white-space: pre-wrap; word-break: break-all; }
 
 .incomplete-note { color: var(--text-3); font-size: 0.9rem; text-align: center; }
+
+.conformance {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;
+}
+.conformance-title { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem; }
+.conformance-sub { color: var(--text-3); font-size: 0.85rem; margin-bottom: 1rem; }
+.conformance-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.conformance-table th { text-align: left; color: var(--text-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
+.conformance-table td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.conformance-table tr:last-child td { border-bottom: none; }
+.conformance-status {
+  display: inline-block; font-size: 0.78rem; font-weight: 700;
+  padding: 0.2rem 0.6rem; border-radius: 999px; white-space: nowrap;
+}
+.conformance-status--supports        { color: var(--supports); background: var(--supports-bg); }
+.conformance-status--does_not_support{ color: var(--critical); background: var(--critical-bg); }
+.conformance-status--needs_review    { color: var(--moderate); background: var(--moderate-bg); }
+
+.pass-list summary {
+  cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem;
+  color: var(--text); list-style: none; display: flex; align-items: center; gap: 0.4rem;
+}
+.pass-list summary::-webkit-details-marker { display: none; }
+.pass-list summary::before { content: "\25B8"; color: var(--supports); }
+.pass-list[open] summary::before { content: "\25BE"; }
+.pass-list-items { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+.pass-card {
+  background: var(--supports-bg); border: 1px solid var(--supports);
+  border-radius: var(--radius); padding: 0.6rem 0.9rem; font-size: 0.9rem;
+}
+.pass-card-help { font-weight: 700; color: var(--text); }
+.pass-card-meta { color: var(--text-3); font-size: 0.82rem; margin-top: 0.15rem; }
 
 .cta-band {
   background: var(--accent-bg); border: 1px solid var(--accent-border);
