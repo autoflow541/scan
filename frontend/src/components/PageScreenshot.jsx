@@ -3,8 +3,6 @@ import { useState } from "react";
 export default function PageScreenshot({ screenshot, issues }) {
   const [naturalSize, setNaturalSize] = useState(null);
 
-  if (!screenshot) return null;
-
   const boxes = [];
   for (const issue of issues) {
     for (const node of issue.nodes) {
@@ -13,6 +11,10 @@ export default function PageScreenshot({ screenshot, issues }) {
       }
     }
   }
+
+  // Nothing to point at -- a screenshot with no highlights on it isn't
+  // useful, and the issue list already says the page came back clean.
+  if (!screenshot || boxes.length === 0) return null;
 
   return (
     <div className="page-screenshot">
