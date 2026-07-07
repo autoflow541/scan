@@ -1,16 +1,18 @@
-"""A simple 0-100 score heuristic from axe-core violations, for the marketing
-"how good is this page" framing. Deliberately simple and monotonic rather than
-a claim of conformance -- UI copy should describe it as a relative indicator,
-not a certification, since WCAG conformance isn't really binary/scorable.
+"""The scan's headline percentage is tied directly to the VPAT-style
+conformance table (see conformance.py), not a separate arbitrary heuristic:
+it's the share of WCAG success criteria this scan actually tested that
+came back "Supports". Criteria with a violation ("Does Not Support") or
+only ambiguous/manual-check items ("Needs Review") don't count toward the
+numerator -- "Needs Review" is deliberately NOT treated as passing, since
+axe couldn't confirm it either way. This keeps the number meaningfully
+equal to "percentage of tested criteria supported", matching how a VPAT
+documents conformance per-criterion, rather than an opaque points system.
 """
 from __future__ import annotations
 
-IMPACT_WEIGHT = {"critical": 10, "serious": 5, "moderate": 2, "minor": 1}
 
-
-def compute_score(violations: list[dict]) -> int:
-    penalty = sum(
-        IMPACT_WEIGHT.get(v.get("impact") or "minor", 1) * max(1, len(v.get("nodes", [])))
-        for v in violations
-    )
-    return max(0, 100 - min(100, penalty))
+def compute_score(conformance_rows: list[dict]) -> int:
+    if not conformance_rows:
+        return 100  # nothing testable was found -- no criteria to fail
+    supports = sum(1 for row in conformance_rows if row["status"] == "supports")
+    return round(supports / len(conformance_rows) * 100)

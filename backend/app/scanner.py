@@ -236,14 +236,15 @@ def _build_scan_result(
         for p in sorted(passes, key=lambda p: p.get("id", ""))
     ]
 
-    conformance = [ConformanceRow(**row) for row in build_conformance(violations, passes, incomplete)]
+    conformance_rows = build_conformance(violations, passes, incomplete)
+    conformance = [ConformanceRow(**row) for row in conformance_rows]
 
     return ScanResult(
         url=requested_url,
         final_url=final_url,
         page_title=page_title,
         scanned_at=datetime.now(timezone.utc),
-        score=compute_score(violations),
+        score=compute_score(conformance_rows),
         counts=counts,
         issues=issues,
         passes=pass_items,
