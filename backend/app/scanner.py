@@ -4,11 +4,13 @@ inject axe-core, and shape the results into a ScanResult.
 from __future__ import annotations
 
 import base64
+import io
 import logging
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+from PIL import Image
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -16,6 +18,7 @@ from playwright.async_api import async_playwright
 
 from .axe_source import load_axe_source
 from .conformance import build_conformance
+from .contrast_check import evaluate_contrast
 from .models import Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult
 from .scoring import compute_score
 from .url_safety import revalidate_landed_host, safe_resolve_target
@@ -54,6 +57,34 @@ _BBOX_SCRIPT = """
   }
 });
 """
+
+# Computed text color + font metrics, used to resolve axe's "incomplete"
+# color-contrast nodes by measuring the actual rendered screenshot pixels
+# (see contrast_check.py for why axe can't always determine this itself).
+_TEXT_STYLE_SCRIPT = """
+(selectors) => selectors.map((sel) => {
+  try {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const style = getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const m = style.color.match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return null;
+    const parts = m[1].split(',').map((s) => parseFloat(s.trim()));
+    return {
+      color: [Math.round(parts[0]), Math.round(parts[1]), Math.round(parts[2])],
+      fontSize: parseFloat(style.fontSize) || 16,
+      fontWeight: parseInt(style.fontWeight, 10) || 400,
+      bbox: { x: rect.left + window.scrollX, y: rect.top + window.scrollY, width: rect.width, height: rect.height },
+    };
+  } catch (e) {
+    return null;
+  }
+});
+"""
+
+_MAX_CONTRAST_NODES_TO_RESOLVE = 30
 
 
 class ScanTimeoutError(Exception):
@@ -115,13 +146,19 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
 
             await page.add_script_tag(content=load_axe_source())
             axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
+            screenshot_bytes = await _capture_screenshot_bytes(page)
+            axe_results = await _resolve_incomplete_contrast(page, axe_results, screenshot_bytes)
             bboxes = await _compute_bboxes(page, axe_results.get("violations", []))
-            screenshot = await _capture_screenshot(page)
             page_title = await page.title()
             final_url = page.url
         finally:
             await browser.close()
 
+    screenshot = (
+        f"data:image/jpeg;base64,{base64.b64encode(screenshot_bytes).decode()}"
+        if screenshot_bytes is not None
+        else None
+    )
     duration_ms = int((time.monotonic() - t0) * 1000)
     return _build_scan_result(url, final_url, page_title, axe_results, duration_ms, bboxes, screenshot)
 
@@ -148,10 +185,11 @@ async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]
     return {sel: box for sel, box in zip(selectors, results) if box is not None}
 
 
-async def _capture_screenshot(page: Page) -> str | None:
-    """Full-page JPEG screenshot as a data URI, for overlaying issue bounding
-    boxes on the frontend. Best-effort -- a scan should still succeed even if
-    the screenshot itself fails or the page is too unusual to capture.
+async def _capture_screenshot_bytes(page: Page) -> bytes | None:
+    """Full-page JPEG screenshot, used both for the frontend overlay and for
+    sampling background pixels behind ambiguous-contrast text. Best-effort --
+    a scan should still succeed even if the screenshot itself fails or the
+    page is too unusual to capture.
     """
     try:
         page_height = await page.evaluate("document.documentElement.scrollHeight")
@@ -160,11 +198,92 @@ async def _capture_screenshot(page: Page) -> str | None:
     full_page = 0 < page_height <= _MAX_FULL_PAGE_HEIGHT
 
     try:
-        image_bytes = await page.screenshot(type="jpeg", quality=60, full_page=full_page, timeout=10_000)
+        return await page.screenshot(type="jpeg", quality=60, full_page=full_page, timeout=10_000)
     except PlaywrightError as exc:
         log.warning("Screenshot capture failed: %s", exc)
         return None
-    return f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
+
+
+async def _resolve_incomplete_contrast(
+    page: Page, axe_results: dict, screenshot_bytes: bytes | None
+) -> dict:
+    """axe-core marks color-contrast "incomplete" (needs manual review) when
+    it can't read a plain CSS background color -- e.g. text over an image or
+    gradient. Since we already have a rendered screenshot, sample the actual
+    pixels instead and reclassify each node as a definite pass or violation,
+    so it flows through the same conformance/scoring pipeline as everything
+    axe *could* determine on its own.
+    """
+    if screenshot_bytes is None:
+        return axe_results
+    incomplete = axe_results.get("incomplete", [])
+    idx = next((i for i, item in enumerate(incomplete) if item.get("id") == "color-contrast"), None)
+    if idx is None:
+        return axe_results
+
+    item = incomplete[idx]
+    nodes = item.get("nodes", [])
+    eligible = [
+        n for n in nodes if len(n.get("target", [])) == 1 and isinstance(n["target"][0], str)
+    ]
+    to_process = eligible[:_MAX_CONTRAST_NODES_TO_RESOLVE]
+    if not to_process:
+        return axe_results
+
+    selectors = [n["target"][0] for n in to_process]
+    try:
+        style_info = await page.evaluate(_TEXT_STYLE_SCRIPT, selectors)
+    except PlaywrightError:
+        return axe_results
+
+    image = Image.open(io.BytesIO(screenshot_bytes)).convert("RGB")
+    resolved_pass: list[dict] = []
+    resolved_fail: list[dict] = []
+    unresolved: list[dict] = []
+    for node, info in zip(to_process, style_info):
+        result = (
+            evaluate_contrast(image, info["bbox"], tuple(info["color"]), info["fontSize"], info["fontWeight"])
+            if info is not None
+            else None
+        )
+        if result is None:
+            unresolved.append(node)
+            continue
+        node = dict(node)
+        node["failureSummary"] = (
+            f"Visually measured contrast ratio {result['ratio']:.2f}:1 "
+            f"(needs {result['threshold']:.1f}:1) -- sampled from the rendered "
+            "screenshot since the background couldn't be read from CSS alone "
+            "(e.g. an image or gradient)."
+        )
+        (resolved_pass if result["passes"] else resolved_fail).append(node)
+
+    processed_ids = {id(n) for n in to_process}
+    leftover_nodes = [n for n in nodes if id(n) not in processed_ids] + unresolved
+    if leftover_nodes:
+        incomplete[idx] = {**item, "nodes": leftover_nodes}
+    else:
+        incomplete.pop(idx)
+
+    if resolved_fail:
+        _merge_nodes_into(axe_results.setdefault("violations", []), item, resolved_fail, default_impact="serious")
+    if resolved_pass:
+        _merge_nodes_into(axe_results.setdefault("passes", []), item, resolved_pass)
+
+    return axe_results
+
+
+def _merge_nodes_into(
+    target_list: list[dict], template: dict, nodes: list[dict], default_impact: str | None = None
+) -> None:
+    existing = next((entry for entry in target_list if entry.get("id") == template.get("id")), None)
+    if existing is not None:
+        existing.setdefault("nodes", []).extend(nodes)
+        return
+    new_entry = {**template, "nodes": nodes}
+    if default_impact is not None:
+        new_entry["impact"] = default_impact
+    target_list.append(new_entry)
 
 
 def _classify_navigation_error(message: str) -> str:
