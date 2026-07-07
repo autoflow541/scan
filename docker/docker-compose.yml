@@ -1,0 +1,16 @@
+# Convenience compose file for local runs.
+#   docker compose -f docker/docker-compose.yml up --build
+services:
+  engine:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: scan-engine
+    ports:
+      - "8001:8001"
+    environment:
+      # Frontend is served same-origin by this container, so CORS mostly
+      # doesn't matter in production; kept configurable for flexibility.
+      CORS_ORIGINS: "*"
+      MAX_CONCURRENT_SCANS: "3"
+    restart: unless-stopped

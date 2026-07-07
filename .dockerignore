@@ -1,0 +1,13 @@
+# Build context is the repo root; keep the image lean.
+# frontend/ IS needed now -- the frontend-build stage compiles it in-image.
+frontend/node_modules/
+frontend/dist/
+docker/
+deploy/
+backend/tests/
+backend/.venv/
+**/__pycache__/
+**/*.pyc
+**/.git/
+**/.env
+*.md

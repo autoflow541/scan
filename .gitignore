@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node / Vite
+node_modules/
+frontend/dist/
+frontend/.vite/
+backend/static/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Vendored at Docker build time / by fetching axe-core locally for dev -- not source
+backend/app/vendor/axe.min.js
+
+# Local test artifacts
+uvicorn.out.log
+uvicorn.err.log
+scan_result.json

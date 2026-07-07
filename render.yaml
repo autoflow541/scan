@@ -1,0 +1,31 @@
+# Render Blueprint -- one web service, no VM, no reverse proxy to manage.
+# Render builds docker/Dockerfile in the cloud (frontend + backend, one
+# image) and terminates TLS for the custom domain automatically.
+#
+# Deploy: push this repo to GitHub, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at the repo. Or skip this file entirely
+# and just click "New +" -> "Web Service" -> pick "Docker" -> point at
+# docker/Dockerfile -- the dashboard path needs no YAML at all.
+#
+# After the service is up, add the custom domain in the Render dashboard
+# (Settings -> Custom Domains -> scan.auto-flow.co) and create the CNAME
+# record it gives you at your DNS provider. Render issues and renews the
+# TLS cert automatically once DNS resolves.
+services:
+  - type: web
+    name: scan-engine
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    # Each scan launches a real Chromium process -- Render's free plan
+    # (512MB RAM) can run this but may need MAX_CONCURRENT_SCANS=1 to avoid
+    # OOM kills under concurrent load. "starter" (paid, more RAM) is safer
+    # for anything beyond light/occasional traffic; change the plan field
+    # to "free" to try the free tier first.
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: MAX_CONCURRENT_SCANS
+        value: "2"
