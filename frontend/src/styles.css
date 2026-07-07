@@ -149,6 +149,26 @@ a { color: var(--accent-deep); }
 
 .incomplete-note { color: var(--text-3); font-size: 0.9rem; text-align: center; }
 
+.page-screenshot {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;
+}
+.page-screenshot-title { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.page-screenshot-sub { color: var(--text-3); font-size: 0.85rem; margin-bottom: 1rem; }
+.page-screenshot-frame {
+  position: relative; width: 100%; line-height: 0;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.page-screenshot-frame img { display: block; width: 100%; height: auto; }
+.page-screenshot-box {
+  position: absolute; border-width: 2px; border-style: solid;
+  border-radius: 2px; box-sizing: border-box; pointer-events: auto;
+}
+.page-screenshot-box--critical { border-color: var(--critical); background: rgba(161, 39, 42, 0.18); }
+.page-screenshot-box--serious  { border-color: var(--serious);  background: rgba(181, 84, 26, 0.18); }
+.page-screenshot-box--moderate { border-color: var(--moderate); background: rgba(138, 109, 0, 0.18); }
+.page-screenshot-box--minor    { border-color: var(--minor);    background: rgba(90, 64, 48, 0.18); }
+
 .conformance {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;

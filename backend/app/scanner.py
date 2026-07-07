@@ -3,18 +3,20 @@ inject axe-core, and shape the results into a ScanResult.
 """
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
 from .axe_source import load_axe_source
 from .conformance import build_conformance
-from .models import ConformanceRow, Issue, IssueNode, PassItem, ScanResult
+from .models import Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult
 from .scoring import compute_score
 from .url_safety import revalidate_landed_host, safe_resolve_target
 from .wcag_map import primary_criterion
@@ -25,6 +27,10 @@ _MAX_NODES_PER_ISSUE = 5
 _MAX_HTML_CHARS = 300
 _AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
 _USER_AGENT = "AutoFlowAccessibilityScanner/1.0 (+https://scan.auto-flow.co)"
+# Pages taller than this (px) skip the full-page screenshot in favor of a
+# viewport-only one -- guards against pathological/infinite-scroll pages
+# blowing up capture time or memory on a memory-constrained instance.
+_MAX_FULL_PAGE_HEIGHT = 8000
 
 _AXE_RUN_SCRIPT = """
 async () => {
@@ -34,6 +40,20 @@ async () => {
   });
 }
 """ % _AXE_TAGS
+
+_BBOX_SCRIPT = """
+(selectors) => selectors.map((sel) => {
+  try {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return null;
+    return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
+  } catch (e) {
+    return null;
+  }
+});
+"""
 
 
 class ScanTimeoutError(Exception):
@@ -95,13 +115,56 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
 
             await page.add_script_tag(content=load_axe_source())
             axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
+            bboxes = await _compute_bboxes(page, axe_results.get("violations", []))
+            screenshot = await _capture_screenshot(page)
             page_title = await page.title()
             final_url = page.url
         finally:
             await browser.close()
 
     duration_ms = int((time.monotonic() - t0) * 1000)
-    return _build_scan_result(url, final_url, page_title, axe_results, duration_ms)
+    return _build_scan_result(url, final_url, page_title, axe_results, duration_ms, bboxes, screenshot)
+
+
+async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]:
+    """Bounding boxes (page-relative, matching a full-page screenshot's
+    coordinate space) for violation nodes -- only for the simple case of a
+    single plain CSS selector (same-document element). Cross-frame/shadow-DOM
+    targets (where axe's target is a nested array) are skipped -- resolving
+    those requires piercing into frames, out of scope for v1.
+    """
+    selectors = [
+        n["target"][0]
+        for v in violations
+        for n in v.get("nodes", [])[:_MAX_NODES_PER_ISSUE]
+        if len(n.get("target", [])) == 1 and isinstance(n["target"][0], str)
+    ]
+    if not selectors:
+        return {}
+    try:
+        results = await page.evaluate(_BBOX_SCRIPT, selectors)
+    except PlaywrightError:
+        return {}
+    return {sel: box for sel, box in zip(selectors, results) if box is not None}
+
+
+async def _capture_screenshot(page: Page) -> str | None:
+    """Full-page JPEG screenshot as a data URI, for overlaying issue bounding
+    boxes on the frontend. Best-effort -- a scan should still succeed even if
+    the screenshot itself fails or the page is too unusual to capture.
+    """
+    try:
+        page_height = await page.evaluate("document.documentElement.scrollHeight")
+    except PlaywrightError:
+        page_height = 0
+    full_page = 0 < page_height <= _MAX_FULL_PAGE_HEIGHT
+
+    try:
+        image_bytes = await page.screenshot(type="jpeg", quality=60, full_page=full_page, timeout=10_000)
+    except PlaywrightError as exc:
+        log.warning("Screenshot capture failed: %s", exc)
+        return None
+    return f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
 
 
 def _classify_navigation_error(message: str) -> str:
@@ -123,6 +186,8 @@ def _build_scan_result(
     page_title: str,
     axe_results: dict,
     duration_ms: int,
+    bboxes: dict[str, dict],
+    screenshot: str | None,
 ) -> ScanResult:
     violations = axe_results.get("violations", [])
     passes = axe_results.get("passes", [])
@@ -149,6 +214,9 @@ def _build_scan_result(
                         html=(n.get("html") or "")[:_MAX_HTML_CHARS],
                         target=n.get("target", []),
                         failure_summary=n.get("failureSummary"),
+                        bbox=Bbox(**bboxes[n["target"][0]])
+                        if len(n.get("target", [])) == 1 and n["target"][0] in bboxes
+                        else None,
                     )
                     for n in nodes[:_MAX_NODES_PER_ISSUE]
                 ],
@@ -182,6 +250,7 @@ def _build_scan_result(
         conformance=conformance,
         incomplete_count=len(incomplete),
         scan_duration_ms=duration_ms,
+        screenshot=screenshot,
     )
 
 

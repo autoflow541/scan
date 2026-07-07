@@ -10,10 +10,18 @@ class ScanRequest(BaseModel):
     url: str
 
 
+class Bbox(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+
+
 class IssueNode(BaseModel):
     html: str
     target: list[str]
     failure_summary: str | None = None
+    bbox: Bbox | None = None
 
 
 class Issue(BaseModel):
@@ -58,3 +66,4 @@ class ScanResult(BaseModel):
     conformance: list[ConformanceRow]
     incomplete_count: int
     scan_duration_ms: int
+    screenshot: str | None = None

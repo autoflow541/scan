@@ -4,6 +4,7 @@ import UrlForm from "./components/UrlForm.jsx";
 import LoadingState from "./components/LoadingState.jsx";
 import ScoreGauge from "./components/ScoreGauge.jsx";
 import IssueList from "./components/IssueList.jsx";
+import PageScreenshot from "./components/PageScreenshot.jsx";
 import ConformanceTable from "./components/ConformanceTable.jsx";
 import PassList from "./components/PassList.jsx";
 import CtaBand from "./components/CtaBand.jsx";
@@ -59,6 +60,7 @@ export default function App() {
                 </div>
               </div>
             </div>
+            <PageScreenshot screenshot={result.screenshot} issues={result.issues} />
             <ConformanceTable rows={result.conformance} />
             <IssueList issues={result.issues} incompleteCount={result.incomplete_count} />
             <PassList passes={result.passes} />
