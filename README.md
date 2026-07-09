@@ -72,16 +72,15 @@ Full docs: [scan.auto-flow.co/docs](https://scan.auto-flow.co/docs)
 
 ## Deployment
 
-Runs on the same DreamCompute VM as [pdf.auto-flow.co](https://pdf.auto-flow.co) (the `remediation/`
-project), sharing one Caddy instance. See `deploy/setup-vm.sh` -- it never overwrites the shared
-`/etc/caddy/Caddyfile` wholesale; it only ever writes `/etc/caddy/sites/scan.conf`, relying on an
-`import /etc/caddy/sites/*.conf` line in the main Caddyfile (a one-time manual migration if this is
-the first product moved to that layout -- the script checks for it and explains the steps if missing).
+Runs on its own dedicated DreamCompute VM (standalone -- not shared with
+[pdf.auto-flow.co](https://pdf.auto-flow.co)'s remediation-engine box). `deploy/setup-vm.sh` does a
+full bootstrap of a fresh Ubuntu 22.04 instance: installs Docker, installs Caddy, builds the image,
+starts the container, and writes the Caddyfile.
 
 ```bash
-scp -r ./scan user@VM_IP:~/scan
-ssh user@VM_IP
-REPO_DIR=~/scan bash ~/scan/deploy/setup-vm.sh
+ssh -i scan-key.pem ubuntu@VM_IP
+git clone https://github.com/autoflow541/scan ~/scan
+ENGINE_HOST=scan.auto-flow.co bash ~/scan/deploy/setup-vm.sh
 ```
 
 The single container (frontend + API, one image, see `docker/Dockerfile`) runs on `127.0.0.1:8001`;
