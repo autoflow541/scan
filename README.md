@@ -72,21 +72,22 @@ Full docs: [scan.auto-flow.co/docs](https://scan.auto-flow.co/docs)
 
 ## Deployment
 
-Deploys as a single Docker web service on [Render](https://render.com) -- no VM, no reverse proxy,
-no Caddy config to maintain. Render builds `docker/Dockerfile` in the cloud and terminates TLS for
-the custom domain automatically.
+Runs on the same DreamCompute VM as [pdf.auto-flow.co](https://pdf.auto-flow.co) (the `remediation/`
+project), sharing one Caddy instance. See `deploy/setup-vm.sh` -- it never overwrites the shared
+`/etc/caddy/Caddyfile` wholesale; it only ever writes `/etc/caddy/sites/scan.conf`, relying on an
+`import /etc/caddy/sites/*.conf` line in the main Caddyfile (a one-time manual migration if this is
+the first product moved to that layout -- the script checks for it and explains the steps if missing).
 
-1. Push this repo to GitHub.
-2. In the Render dashboard: **New +** -> **Web Service** -> connect the repo -> select **Docker** as
-   the environment (Render finds `docker/Dockerfile` automatically), or use the included `render.yaml`
-   via **New +** -> **Blueprint** for a one-shot setup.
-3. **Settings -> Custom Domains** -> add `scan.auto-flow.co` -> create the CNAME record Render gives
-   you at your DNS provider. TLS is issued and renewed automatically once DNS resolves.
-4. Set `MAX_CONCURRENT_SCANS` lower (e.g. `1`) if running on a memory-constrained plan -- each scan
-   launches a real Chromium process. See the comments in `render.yaml`.
+```bash
+scp -r ./scan user@VM_IP:~/scan
+ssh user@VM_IP
+REPO_DIR=~/scan bash ~/scan/deploy/setup-vm.sh
+```
 
-Any other platform that runs a Dockerfile (Fly.io, Railway, a plain VM) works the same way -- it's
-one image exposing port 8001 with a `/health` check, nothing Render-specific baked in.
+The single container (frontend + API, one image, see `docker/Dockerfile`) runs on `127.0.0.1:8001`;
+Caddy reverse-proxies `scan.auto-flow.co` to it and handles TLS via Let's Encrypt automatically.
+To update after a code change: `docker build`, then `docker stop scan-engine && docker rm scan-engine`,
+then re-run `deploy/run-engine.sh`.
 
 ## License
 

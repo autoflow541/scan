@@ -1,0 +1,20 @@
+# Caddy site block for the accessibility scanner.
+# Caddy obtains and renews a Let's Encrypt TLS cert automatically.
+#
+# Domain: scan.auto-flow.co
+#
+# This VM already hosts pdf.auto-flow.co (see ../../remediation/deploy/), so
+# this file is NOT the whole /etc/caddy/Caddyfile -- it's one site block meant
+# to live at /etc/caddy/sites/scan.conf, picked up via an `import` directive in
+# the shared Caddyfile (see setup-vm.sh for the one-time import-line setup).
+# Do not `tee` this over /etc/caddy/Caddyfile directly -- that would wipe out
+# remediation's site block.
+#
+# The scan-engine container serves both the API and the built frontend from
+# one process/port (see backend/app/main.py's static file mount) -- unlike
+# remediation's two-target split (API vs /srv/frontend), everything here just
+# proxies to the one container.
+
+scan.auto-flow.co {
+    reverse_proxy localhost:8001
+}
