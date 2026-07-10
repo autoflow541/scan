@@ -169,6 +169,31 @@ a { color: var(--accent-deep); }
 .page-screenshot-box--moderate { border-color: var(--moderate); background: rgba(138, 109, 0, 0.18); }
 .page-screenshot-box--minor    { border-color: var(--minor);    background: rgba(90, 64, 48, 0.18); }
 
+/* Numbered pin anchored to each marker's top-left corner. */
+.page-screenshot-pin {
+  position: absolute; top: -11px; left: -11px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem; line-height: 1;
+  color: #fff; border: 2px solid #fff; border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.page-screenshot-pin--static { position: static; flex-shrink: 0; box-shadow: none; }
+.page-screenshot-pin--critical { background: var(--critical); }
+.page-screenshot-pin--serious  { background: var(--serious); }
+.page-screenshot-pin--moderate { background: var(--moderate); }
+.page-screenshot-pin--minor    { background: var(--minor); }
+
+.page-screenshot-key {
+  list-style: none; margin: 1rem 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.page-screenshot-key-item { display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.88rem; }
+.page-screenshot-key-text { color: var(--text-2); line-height: 1.5; }
+.page-screenshot-key-text strong { color: var(--text); }
+.page-screenshot-key-off { color: var(--text-3); font-style: italic; }
+.page-screenshot-note { margin-top: 0.85rem; font-size: 0.82rem; color: var(--text-3); }
+
 .conformance {
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius-lg); padding: 1.25rem 1.5rem;
