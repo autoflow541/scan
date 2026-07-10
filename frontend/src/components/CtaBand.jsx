@@ -6,7 +6,7 @@ export default function CtaBand() {
         This automated scan catches what a script can see. Our audits add keyboard-only navigation,
         screen reader passes, and the WCAG 2.2 criteria automated tools miss -- then we do the fixes.
       </p>
-      <a className="btn-primary" href="https://www.auto-flow.co/index.html#contact">
+      <a className="btn-primary" href="https://auto-flow.co" target="_blank" rel="noopener noreferrer">
         Request a full audit
       </a>
     </div>
