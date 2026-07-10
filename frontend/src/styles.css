@@ -186,6 +186,40 @@ a { color: var(--accent-deep); }
 .conformance-status--supports        { color: var(--supports); background: var(--supports-bg); }
 .conformance-status--does_not_support{ color: var(--critical); background: var(--critical-bg); }
 .conformance-status--needs_review    { color: var(--moderate); background: var(--moderate-bg); }
+.conformance-status--partial         { color: var(--serious); background: var(--serious-bg); }
+.conformance-status--na              { color: var(--text-3); background: var(--bg-warm); }
+
+/* --- Export bar --- */
+.export-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1.25rem 0;
+}
+.export-label { font-size: 0.85rem; font-weight: 700; color: var(--text-3); margin-right: 0.15rem; }
+.btn-secondary {
+  font-family: var(--font-body); font-weight: 700; font-size: 0.85rem;
+  color: var(--accent-deep); background: transparent;
+  border: 1.5px solid var(--accent-deep); padding: 0.5rem 1rem;
+  border-radius: var(--radius); cursor: pointer;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--accent-bg); }
+.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+.export-error { color: var(--critical); font-size: 0.85rem; }
+
+/* --- Digital VPAT --- */
+.vpat { margin: 1.5rem 0; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0.85rem 1.25rem; background: var(--bg-card); }
+.vpat > summary {
+  cursor: pointer; list-style: none; display: flex; flex-wrap: wrap;
+  align-items: baseline; gap: 0.6rem;
+}
+.vpat > summary::-webkit-details-marker { display: none; }
+.vpat > summary::before { content: "\25B8"; color: var(--accent-deep); }
+.vpat[open] > summary::before { content: "\25BE"; }
+.vpat-title { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; color: var(--text); }
+.vpat-summary { font-size: 0.8rem; color: var(--text-3); }
+.vpat-note { font-size: 0.82rem; color: var(--text-2); margin: 0.75rem 0 1rem; line-height: 1.6; }
+.vpat-caption { text-align: left; font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--text); margin: 1.25rem 0 0.4rem; }
+.vpat-table { margin-bottom: 0.5rem; }
+.vpat-table th[scope="row"], .vpat-sc { font-weight: 600; color: var(--text); width: 32%; }
+.vpat-remarks { color: var(--text-2); font-size: 0.86rem; }
 
 .pass-list summary {
   cursor: pointer; font-family: var(--font-display); font-weight: 700; font-size: 1.05rem;

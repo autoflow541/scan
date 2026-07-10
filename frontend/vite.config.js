@@ -15,6 +15,8 @@ export default defineConfig({
     // difference.
     proxy: {
       "/scan": "http://localhost:8001",
+      "/vpat": "http://localhost:8001",
+      "/issues.csv": "http://localhost:8001",
       "/health": "http://localhost:8001",
     },
   },

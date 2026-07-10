@@ -54,6 +54,14 @@ class ConformanceRow(BaseModel):
     review_rules: list[str]
 
 
+class VpatRow(BaseModel):
+    num: str  # e.g. "1.4.3"
+    title: str  # e.g. "Contrast (Minimum)"
+    level: str  # "A" | "AA"
+    conformance: str  # "Supports" | "Partially Supports" | "Does Not Support" | "Not Evaluated"
+    remarks: str
+
+
 class ScanResult(BaseModel):
     url: str
     final_url: str
@@ -64,6 +72,8 @@ class ScanResult(BaseModel):
     issues: list[Issue]
     passes: list[PassItem]
     conformance: list[ConformanceRow]
+    vpat: list[VpatRow] = Field(default_factory=list)
+    vpat_summary: dict[str, int] = Field(default_factory=dict)
     incomplete_count: int
     scan_duration_ms: int
     screenshot: str | None = None

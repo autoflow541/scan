@@ -14,13 +14,15 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .csv_export import issues_to_csv
 from .models import ScanRequest, ScanResult
 from .rate_limit import RateLimiter
 from .scanner import ScanNavigationError, ScanTimeoutError, run_scan
 from .url_safety import UrlValidationError
+from .vpat import render_vpat_html
 
 _API_KEY = os.environ.get("API_KEY", "")  # unused for this public tool; kept for parity with remediation
 _OPEN_PATHS = {"/health", "/docs", "/redoc", "/openapi.json"}
@@ -113,6 +115,46 @@ async def scan(req: ScanRequest, request: Request) -> ScanResult:
 
     log.info("SCAN done url=%r score=%d issues=%d", req.url, result.score, len(result.issues))
     return result
+
+
+@app.post(
+    "/vpat",
+    tags=["core"],
+    summary="Render a downloadable Digital VPAT (Accessibility Conformance Report) from a scan result",
+    response_class=HTMLResponse,
+)
+async def vpat(result: ScanResult) -> HTMLResponse:
+    """Turn a ScanResult (obtained from /scan) into a standalone, downloadable
+    HTML VPAT / ACR document. Stateless formatting only -- no scanning, so it
+    is not rate-limited alongside /scan.
+    """
+    doc = render_vpat_html(
+        url=result.url,
+        page_title=result.page_title,
+        scanned_at=result.scanned_at,
+        rows=[row.model_dump() for row in result.vpat],
+    )
+    filename = "accessibility-conformance-report.html"
+    return HTMLResponse(
+        content=doc,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post(
+    "/issues.csv",
+    tags=["core"],
+    summary="Export a scan result's issues as CSV (one row per element)",
+)
+async def issues_csv(result: ScanResult) -> Response:
+    """Turn a ScanResult (from /scan) into a downloadable CSV worklist -- one
+    row per offending element. Stateless formatting only; no scanning."""
+    csv_text = issues_to_csv(result)
+    return Response(
+        content=csv_text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="accessibility-issues.csv"'},
+    )
 
 
 # Serve the built frontend (React/Vite) from the same container/process as the

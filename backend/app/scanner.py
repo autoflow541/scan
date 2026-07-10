@@ -19,9 +19,11 @@ from playwright.async_api import async_playwright
 from .axe_source import load_axe_source
 from .conformance import build_conformance
 from .contrast_check import evaluate_contrast
-from .models import Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult
+from .models import Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult, VpatRow
 from .scoring import compute_score
+from .state_checks import run_state_checks
 from .url_safety import revalidate_landed_host, safe_resolve_target
+from .vpat import build_vpat, vpat_summary
 from .wcag_map import primary_criterion
 
 log = logging.getLogger(__name__)
@@ -148,6 +150,11 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
             screenshot_bytes = await _capture_screenshot_bytes(page)
             axe_results = await _resolve_incomplete_contrast(page, axe_results, screenshot_bytes)
+            # State-based checks (keyboard walk, 320px reflow) axe can't do on its
+            # own; results are shaped like axe entries and merged in below.
+            state = await run_state_checks(page)
+            for bucket in ("violations", "passes", "incomplete"):
+                axe_results.setdefault(bucket, []).extend(state.get(bucket, []))
             bboxes = await _compute_bboxes(page, axe_results.get("violations", []))
             page_title = await page.title()
             final_url = page.url
@@ -358,6 +365,9 @@ def _build_scan_result(
     conformance_rows = build_conformance(violations, passes, incomplete)
     conformance = [ConformanceRow(**row) for row in conformance_rows]
 
+    vpat_rows = build_vpat(conformance_rows)
+    vpat = [VpatRow(**row) for row in vpat_rows]
+
     return ScanResult(
         url=requested_url,
         final_url=final_url,
@@ -368,6 +378,8 @@ def _build_scan_result(
         issues=issues,
         passes=pass_items,
         conformance=conformance,
+        vpat=vpat,
+        vpat_summary=vpat_summary(vpat_rows),
         incomplete_count=len(incomplete),
         scan_duration_ms=duration_ms,
         screenshot=screenshot,

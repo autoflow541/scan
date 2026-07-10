@@ -6,6 +6,8 @@ import ScoreGauge from "./components/ScoreGauge.jsx";
 import IssueList from "./components/IssueList.jsx";
 import PageScreenshot from "./components/PageScreenshot.jsx";
 import ConformanceTable from "./components/ConformanceTable.jsx";
+import VpatTable from "./components/VpatTable.jsx";
+import ExportBar from "./components/ExportBar.jsx";
 import PassList from "./components/PassList.jsx";
 import CtaBand from "./components/CtaBand.jsx";
 import ErrorState from "./components/ErrorState.jsx";
@@ -60,8 +62,10 @@ export default function App() {
                 </div>
               </div>
             </div>
+            <ExportBar result={result} />
             <PageScreenshot screenshot={result.screenshot} issues={result.issues} />
             <ConformanceTable rows={result.conformance} />
+            <VpatTable rows={result.vpat} summary={result.vpat_summary} />
             <IssueList issues={result.issues} incompleteCount={result.incomplete_count} />
             <PassList passes={result.passes} />
           </>
