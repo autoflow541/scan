@@ -49,6 +49,12 @@ a { color: var(--accent-deep); }
   padding: 1.5rem 1.5rem 0.5rem;
   text-align: center;
 }
+.app-byline {
+  font-size: 0.82rem; font-weight: 600; letter-spacing: 0.02em;
+  text-transform: uppercase; margin-bottom: 0.5rem;
+}
+.app-byline a { color: var(--text-3); text-decoration: none; }
+.app-byline a:hover { color: var(--accent-deep); }
 .app-title {
   font-family: var(--font-display); font-weight: 800;
   font-size: clamp(1.6rem, 4vw, 2.2rem);

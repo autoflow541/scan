@@ -35,6 +35,9 @@ export default function App() {
   return (
     <>
       <header className="app-header">
+        <p className="app-byline">
+          <a href="https://auto-flow.co" target="_blank" rel="noopener noreferrer">Auto-Flow Automations Inc.</a>
+        </p>
         <h1 className="app-title">Free WCAG Accessibility Scan</h1>
         <p className="app-subtitle">Paste a URL. We'll scan that one page and show you what to fix.</p>
       </header>
@@ -71,11 +74,14 @@ export default function App() {
           </>
         )}
 
-        <CtaBand />
+        <CtaBand score={result?.score} />
       </main>
 
       <footer className="app-footer">
-        <p>A free tool from Auto-Flow Automations Inc. &middot; Not a substitute for a full manual audit.</p>
+        <p>
+          A free tool from <a href="https://auto-flow.co" target="_blank" rel="noopener noreferrer">Auto-Flow Automations Inc.</a>
+          &middot; Not a substitute for a full manual audit.
+        </p>
       </footer>
     </>
   );
