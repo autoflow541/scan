@@ -70,3 +70,8 @@ def test_render_html_is_self_contained_and_escaped():
     assert "&lt;x&gt;" in doc  # URL is HTML-escaped
     assert "Home &amp; Co" in doc
     assert "axe-core" in doc
+
+
+def test_render_html_links_to_auto_flow_co():
+    doc = render_vpat_html(url="https://example.com", page_title="Example", scanned_at=None, rows=build_vpat([]))
+    assert doc.count('href="https://auto-flow.co"') >= 2  # CTA callout + footer credit
