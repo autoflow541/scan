@@ -176,10 +176,17 @@ async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]
     single plain CSS selector (same-document element). Cross-frame/shadow-DOM
     targets (where axe's target is a nested array) are skipped -- resolving
     those requires piercing into frames, out of scope for v1.
+
+    af-reflow is excluded: its offending elements were measured at a 320px
+    mobile viewport (see state_checks._reflow), but this runs after the
+    viewport has been restored to desktop width to match the screenshot. A
+    bbox queried now would show the element's normal desktop position/size,
+    not the overflow that was actually detected -- a misleading marker.
     """
     selectors = [
         n["target"][0]
         for v in violations
+        if v.get("id") != "af-reflow"
         for n in v.get("nodes", [])[:_MAX_NODES_PER_ISSUE]
         if len(n.get("target", [])) == 1 and isinstance(n["target"][0], str)
     ]

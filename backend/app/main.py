@@ -77,6 +77,17 @@ _scan_semaphore = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT_SCANS", "
 _SEMAPHORE_WAIT_S = 2.0
 _OVERALL_TIMEOUT_S = 35.0
 
+# /vpat and /issues.csv don't launch a browser (cheap string formatting), so
+# they get a more generous limit than /scan -- but unlike /scan they had NO
+# rate limiting at all before, which let anyone hammer them for free with
+# arbitrary client-supplied JSON bodies. A separate bucket keeps that traffic
+# from being able to starve real scans' tokens on the main limiter.
+_export_rate_limiter = RateLimiter(capacity=20, refill_per_sec=1 / 5)
+
+
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
 
 @app.get("/health", tags=["status"], summary="Health check")
 def health() -> dict:
@@ -85,7 +96,7 @@ def health() -> dict:
 
 @app.post("/scan", response_model=ScanResult, tags=["core"], summary="Scan a single URL for WCAG accessibility issues")
 async def scan(req: ScanRequest, request: Request) -> ScanResult:
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _client_ip(request)
     if not _rate_limiter.check(client_ip):
         raise HTTPException(
             status_code=429,
@@ -123,11 +134,13 @@ async def scan(req: ScanRequest, request: Request) -> ScanResult:
     summary="Render a downloadable Digital VPAT (Accessibility Conformance Report) from a scan result",
     response_class=HTMLResponse,
 )
-async def vpat(result: ScanResult) -> HTMLResponse:
+async def vpat(result: ScanResult, request: Request) -> HTMLResponse:
     """Turn a ScanResult (obtained from /scan) into a standalone, downloadable
-    HTML VPAT / ACR document. Stateless formatting only -- no scanning, so it
-    is not rate-limited alongside /scan.
+    HTML VPAT / ACR document. Stateless formatting only -- no browser launch,
+    so it's on a lighter, separate rate limit than /scan rather than none.
     """
+    if not _export_rate_limiter.check(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a bit.", headers={"Retry-After": "5"})
     doc = render_vpat_html(
         url=result.url,
         page_title=result.page_title,
@@ -146,9 +159,11 @@ async def vpat(result: ScanResult) -> HTMLResponse:
     tags=["core"],
     summary="Export a scan result's issues as CSV (one row per element)",
 )
-async def issues_csv(result: ScanResult) -> Response:
+async def issues_csv(result: ScanResult, request: Request) -> Response:
     """Turn a ScanResult (from /scan) into a downloadable CSV worklist -- one
     row per offending element. Stateless formatting only; no scanning."""
+    if not _export_rate_limiter.check(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a bit.", headers={"Retry-After": "5"})
     csv_text = issues_to_csv(result)
     return Response(
         content=csv_text,

@@ -63,6 +63,33 @@ def test_commas_and_newlines_are_quoted():
     assert rows[1][0] == ""  # missing criterion -> empty cell
 
 
+def test_formula_prefixed_cells_are_neutralized():
+    # HTML/description come from the *scanned page*, not the user -- a hostile
+    # page could craft a value Excel/Sheets interprets as a formula on open.
+    issue = Issue(
+        id="r", impact="minor", wcag_criterion=None, tags=[],
+        description="=cmd|'/c calc'!A0", help="h", help_url="u",
+        node_count=1,
+        nodes=[IssueNode(html="+SUM(A1:A9)", target=["@evil"], failure_summary="-1;DROP")],
+    )
+    rows = _rows(issues_to_csv(_result([issue])))
+    assert rows[1][3] == "'=cmd|'/c calc'!A0"
+    assert rows[1][4] == "'@evil"
+    assert rows[1][5] == "'+SUM(A1:A9)"
+    assert rows[1][6] == "'-1;DROP"
+
+
+def test_normal_text_is_left_untouched():
+    issue = Issue(
+        id="r", impact="minor", wcag_criterion=None, tags=[],
+        description="normal-looking text (not a formula)", help="h", help_url="u",
+        node_count=1,
+        nodes=[IssueNode(html="<b>x</b>", target=["b"], failure_summary=None)],
+    )
+    rows = _rows(issues_to_csv(_result([issue])))
+    assert rows[1][3] == "normal-looking text (not a formula)"
+
+
 def test_issue_with_no_nodes_still_emits_a_row():
     issue = Issue(
         id="doc-title", impact="serious", wcag_criterion="2.4.2 Page Titled",

@@ -18,9 +18,9 @@ class Bbox(BaseModel):
 
 
 class IssueNode(BaseModel):
-    html: str
-    target: list[str]
-    failure_summary: str | None = None
+    html: str = Field(max_length=2000)
+    target: list[str] = Field(max_length=20)
+    failure_summary: str | None = Field(default=None, max_length=2000)
     bbox: Bbox | None = None
 
 
@@ -28,20 +28,23 @@ class Issue(BaseModel):
     id: str
     impact: str
     wcag_criterion: str | None = None
-    tags: list[str]
-    description: str
-    help: str
+    tags: list[str] = Field(max_length=30)
+    description: str = Field(max_length=2000)
+    help: str = Field(max_length=2000)
     help_url: str
     node_count: int
-    nodes: list[IssueNode]
+    # A real scan caps this at 5 (see scanner._MAX_NODES_PER_ISSUE); the export
+    # endpoints accept a client-supplied ScanResult though, so this bounds how
+    # large a fabricated payload's per-issue node list can be.
+    nodes: list[IssueNode] = Field(max_length=50)
 
 
 class PassItem(BaseModel):
     id: str
     wcag_criterion: str | None = None
-    tags: list[str]
-    description: str
-    help: str
+    tags: list[str] = Field(max_length=30)
+    description: str = Field(max_length=2000)
+    help: str = Field(max_length=2000)
     help_url: str
     node_count: int
 
@@ -49,9 +52,9 @@ class PassItem(BaseModel):
 class ConformanceRow(BaseModel):
     criterion: str
     status: str  # "supports" | "does_not_support" | "needs_review"
-    passed_rules: list[str]
-    failed_rules: list[str]
-    review_rules: list[str]
+    passed_rules: list[str] = Field(max_length=100)
+    failed_rules: list[str] = Field(max_length=100)
+    review_rules: list[str] = Field(max_length=100)
 
 
 class VpatRow(BaseModel):
@@ -59,7 +62,7 @@ class VpatRow(BaseModel):
     title: str  # e.g. "Contrast (Minimum)"
     level: str  # "A" | "AA"
     conformance: str  # "Supports" | "Partially Supports" | "Does Not Support" | "Not Evaluated"
-    remarks: str
+    remarks: str = Field(max_length=2000)
 
 
 class ScanResult(BaseModel):
@@ -69,11 +72,14 @@ class ScanResult(BaseModel):
     scanned_at: datetime
     score: int
     counts: dict[str, int] = Field(default_factory=dict)
-    issues: list[Issue]
-    passes: list[PassItem]
-    conformance: list[ConformanceRow]
-    vpat: list[VpatRow] = Field(default_factory=list)
+    # Bounds are generous relative to what a real scan produces (see
+    # scanner.py) -- they exist to cap how large a client-supplied payload to
+    # /vpat or /issues.csv can be, not to constrain normal /scan output.
+    issues: list[Issue] = Field(max_length=500)
+    passes: list[PassItem] = Field(max_length=500)
+    conformance: list[ConformanceRow] = Field(max_length=300)
+    vpat: list[VpatRow] = Field(default_factory=list, max_length=300)
     vpat_summary: dict[str, int] = Field(default_factory=dict)
     incomplete_count: int
     scan_duration_ms: int
-    screenshot: str | None = None
+    screenshot: str | None = Field(default=None, max_length=15_000_000)
