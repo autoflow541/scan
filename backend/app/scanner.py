@@ -52,6 +52,10 @@ _RETRY_STATUS_CODES = {403, 429}
 # viewport-only one -- guards against pathological/infinite-scroll pages
 # blowing up capture time or memory on a memory-constrained instance.
 _MAX_FULL_PAGE_HEIGHT = 8000
+_DESKTOP_VIEWPORT = {"width": 1280, "height": 800}
+# 320px matches WCAG 1.4.10 Reflow's reference width (same viewport
+# state_checks._reflow uses) -- one shared "mobile" definition for the scan.
+_MOBILE_VIEWPORT = {"width": 320, "height": 512}
 
 _AXE_RUN_SCRIPT = """
 async () => {
@@ -150,6 +154,13 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
                 axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
             except PlaywrightError as exc:
                 raise ScanNavigationError("script_injection_blocked") from exc
+            # Re-run the full ruleset at a mobile viewport -- desktop-only
+            # testing misses issues that only appear in a narrow layout
+            # (contrast/touch-targets on responsive-only elements, overlap
+            # that only happens once content reflows). axe is already
+            # injected in this page from the desktop run above.
+            mobile_axe_results = await _run_mobile_axe_pass(page)
+            axe_results = _merge_mobile_axe_results(axe_results, mobile_axe_results)
             screenshot_bytes = await _capture_screenshot_bytes(page)
             axe_results = await _resolve_incomplete_contrast(page, axe_results, screenshot_bytes)
             # State-based checks (keyboard walk, 320px reflow) axe can't do on its
@@ -174,7 +185,7 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
 
 async def _new_context(browser, *, browser_like: bool):
     context = await browser.new_context(
-        viewport={"width": 1280, "height": 800},
+        viewport=_DESKTOP_VIEWPORT,
         user_agent=_USER_AGENT_BROWSER if browser_like else _USER_AGENT_HONEST,
         ignore_https_errors=False,
         # Many real sites (esp. ones security-conscious enough to also care
@@ -230,6 +241,58 @@ async def _navigate_with_fallback(browser, validated_url: str, nav_timeout_ms: i
     raise last_exc
 
 
+async def _run_mobile_axe_pass(page: Page) -> dict:
+    """Re-run axe at a mobile viewport. Best-effort: any failure here just
+    means we miss mobile-only findings, not that the whole scan fails --
+    the desktop results already collected are worth keeping regardless.
+    """
+    empty = {"violations": [], "passes": [], "incomplete": []}
+    try:
+        await page.set_viewport_size(_MOBILE_VIEWPORT)
+        await page.wait_for_timeout(250)  # let responsive CSS settle
+        results = await page.evaluate(_AXE_RUN_SCRIPT)
+    except PlaywrightError as exc:
+        log.warning("Mobile axe pass failed: %s", exc)
+        results = empty
+    finally:
+        try:
+            await page.set_viewport_size(_DESKTOP_VIEWPORT)
+        except PlaywrightError:
+            pass
+    return results
+
+
+def _merge_mobile_axe_results(desktop: dict, mobile: dict) -> dict:
+    merged = {bucket: list(desktop.get(bucket, [])) for bucket in ("violations", "passes", "incomplete")}
+    for bucket in ("violations", "passes", "incomplete"):
+        for entry in mobile.get(bucket, []):
+            _merge_axe_entry(merged[bucket], entry)
+    return merged
+
+
+def _merge_axe_entry(target_list: list[dict], entry: dict) -> None:
+    """Merge one mobile-sourced axe entry into target_list. Rule id is a
+    de-facto unique key throughout the rest of the pipeline (conformance
+    rows, React list keys), so a rule that also has a desktop entry gets its
+    new nodes appended there instead of creating a second entry with the
+    same id -- deduped by target selector so an element failing at both
+    viewports isn't listed twice. Every newly-added node is flagged
+    mobile_only so the UI can call out what desktop testing alone would miss.
+    """
+    new_nodes = entry.get("nodes", [])
+    existing = next((e for e in target_list if e.get("id") == entry.get("id")), None)
+    if existing is None:
+        for n in new_nodes:
+            n["mobileOnly"] = True
+        target_list.append({**entry, "nodes": list(new_nodes)})
+        return
+    existing_targets = {tuple(n.get("target", [])) for n in existing.get("nodes", [])}
+    for n in new_nodes:
+        if tuple(n.get("target", [])) not in existing_targets:
+            n = {**n, "mobileOnly": True}
+            existing.setdefault("nodes", []).append(n)
+
+
 async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]:
     """Bounding boxes (page-relative, matching a full-page screenshot's
     coordinate space) for violation nodes -- only for the simple case of a
@@ -237,18 +300,19 @@ async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]
     targets (where axe's target is a nested array) are skipped -- resolving
     those requires piercing into frames, out of scope for v1.
 
-    af-reflow is excluded: its offending elements were measured at a 320px
-    mobile viewport (see state_checks._reflow), but this runs after the
-    viewport has been restored to desktop width to match the screenshot. A
-    bbox queried now would show the element's normal desktop position/size,
-    not the overflow that was actually detected -- a misleading marker.
+    af-reflow, and any node flagged mobileOnly, are excluded: they were
+    found at a 320px mobile viewport (see state_checks._reflow and
+    _run_mobile_axe_pass), but this runs after the viewport has been
+    restored to desktop width to match the screenshot. A bbox queried now
+    would show the element's normal desktop position/size, not the mobile
+    state that was actually flagged -- a misleading marker.
     """
     selectors = [
         n["target"][0]
         for v in violations
         if v.get("id") != "af-reflow"
         for n in v.get("nodes", [])[:_MAX_NODES_PER_ISSUE]
-        if len(n.get("target", [])) == 1 and isinstance(n["target"][0], str)
+        if not n.get("mobileOnly") and len(n.get("target", [])) == 1 and isinstance(n["target"][0], str)
     ]
     if not selectors:
         return {}
@@ -360,6 +424,24 @@ def _merge_nodes_into(
     target_list.append(new_entry)
 
 
+def _select_display_nodes(nodes: list[dict]) -> list[dict]:
+    """Cap to _MAX_NODES_PER_ISSUE for display, but guarantee mobile-only
+    findings aren't silently dropped just because they were appended after
+    enough desktop nodes to fill the cap -- they're the whole point of the
+    mobile pass, so reserve room for a couple even when an issue has many
+    desktop-only affected elements.
+    """
+    if len(nodes) <= _MAX_NODES_PER_ISSUE:
+        return nodes
+    mobile = [n for n in nodes if n.get("mobileOnly")]
+    other = [n for n in nodes if not n.get("mobileOnly")]
+    reserved = min(2, len(mobile))
+    selected = mobile[:reserved] + other[: _MAX_NODES_PER_ISSUE - reserved]
+    if len(selected) < _MAX_NODES_PER_ISSUE:
+        selected += mobile[reserved : reserved + (_MAX_NODES_PER_ISSUE - len(selected))]
+    return selected
+
+
 def _classify_navigation_error(message: str) -> str:
     lowered = message.lower()
     if "err_name_not_resolved" in lowered:
@@ -410,8 +492,9 @@ def _build_scan_result(
                         bbox=Bbox(**bboxes[n["target"][0]])
                         if len(n.get("target", [])) == 1 and n["target"][0] in bboxes
                         else None,
+                        mobile_only=bool(n.get("mobileOnly")),
                     )
-                    for n in nodes[:_MAX_NODES_PER_ISSUE]
+                    for n in _select_display_nodes(nodes)
                 ],
             )
         )

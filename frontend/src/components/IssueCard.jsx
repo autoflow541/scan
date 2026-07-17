@@ -19,6 +19,7 @@ export default function IssueCard({ issue }) {
           <summary>Show affected elements ({issue.nodes.length})</summary>
           {issue.nodes.map((node, i) => (
             <div className="issue-node" key={i}>
+              {node.mobile_only && <span className="mobile-only-badge">Mobile only</span>}
               <code>{node.html}</code>
               {node.failure_summary && (
                 <p style={{ marginTop: "0.4rem", color: "var(--text-3)" }}>{node.failure_summary}</p>

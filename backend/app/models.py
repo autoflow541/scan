@@ -22,6 +22,9 @@ class IssueNode(BaseModel):
     target: list[str] = Field(max_length=20)
     failure_summary: str | None = Field(default=None, max_length=2000)
     bbox: Bbox | None = None
+    # True if this element only failed at the 320px mobile-width axe pass,
+    # not at desktop width (see scanner._run_mobile_axe_pass).
+    mobile_only: bool = False
 
 
 class Issue(BaseModel):
