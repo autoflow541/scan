@@ -86,6 +86,21 @@ _export_rate_limiter = RateLimiter(capacity=20, refill_per_sec=1 / 5)
 
 
 def _client_ip(request: Request) -> str:
+    """The real visitor IP, for per-IP rate limiting.
+
+    In production this process is only reachable through Caddy (the
+    container binds 127.0.0.1:8001 -- see deploy/setup-vm.sh -- so nothing
+    external can hit it directly), and Caddy's reverse_proxy sets
+    X-Forwarded-For on every request by default. Without this, every request
+    arrives from Caddy's own loopback connection and request.client.host is
+    always 127.0.0.1 -- meaning ALL visitors would share one rate-limit
+    bucket instead of getting their own, so one busy visitor could lock
+    everyone else out. Take the leftmost (original client) address; local
+    dev without Caddy in front just falls back to the direct connection.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 
