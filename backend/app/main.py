@@ -120,7 +120,11 @@ async def scan(req: ScanRequest, request: Request) -> ScanResult:
     except UrlValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ScanNavigationError as exc:
-        raise HTTPException(status_code=422, detail=f"Could not load that page ({exc.reason}).") from exc
+        if exc.reason == "script_injection_blocked":
+            detail = "This page's security policy blocks our scanner from running (a strict Content-Security-Policy). We couldn't test it automatically -- a manual audit can still cover it."
+        else:
+            detail = f"Could not load that page ({exc.reason})."
+        raise HTTPException(status_code=422, detail=detail) from exc
     except (ScanTimeoutError, asyncio.TimeoutError):
         raise HTTPException(status_code=504, detail="Scan timed out. The page may be too slow or unreachable.")
 

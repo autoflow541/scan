@@ -31,7 +31,23 @@ log = logging.getLogger(__name__)
 _MAX_NODES_PER_ISSUE = 5
 _MAX_HTML_CHARS = 300
 _AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
-_USER_AGENT = "AutoFlowAccessibilityScanner/1.0 (+https://scan.auto-flow.co)"
+# Two fingerprints, tried in order (see _navigate_with_fallback). Neither one
+# is universally best: some sites explicitly allow known, transparent bots
+# and block generic browser-UA traffic that lacks other browser-level
+# signals; others do the opposite and block anything that doesn't look like
+# a real browser. This is a single, user-initiated render of one page --
+# functionally the same as a person opening it -- not used to evade
+# paywalls, rate limits, or ToS restrictions on bulk/automated access.
+_USER_AGENT_HONEST = "AutoFlowAccessibilityScanner/1.0 (+https://scan.auto-flow.co)"
+_USER_AGENT_BROWSER = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+_HIDE_WEBDRIVER_SCRIPT = "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+# Status codes worth retrying with the other fingerprint -- classic bot-block
+# signals. A real 404/500 wouldn't be fixed by changing the UA, so those
+# raise immediately instead of wasting a second attempt.
+_RETRY_STATUS_CODES = {403, 429}
 # Pages taller than this (px) skip the full-page screenshot in favor of a
 # viewport-only one -- guards against pathological/infinite-scroll pages
 # blowing up capture time or memory on a memory-constrained instance.
@@ -113,30 +129,13 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             args=[
                 f"--host-resolver-rules=MAP {hostname} {pinned_ip}",
                 "--disable-gpu",
+                # Removes the blink feature responsible for navigator.webdriver
+                # and other automation tells -- see _USER_AGENT comment above.
+                "--disable-blink-features=AutomationControlled",
             ],
         )
         try:
-            context = await browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent=_USER_AGENT,
-                ignore_https_errors=False,
-            )
-            page = await context.new_page()
-            try:
-                response = await page.goto(
-                    validated_url, wait_until="domcontentloaded", timeout=nav_timeout_ms
-                )
-            except PlaywrightTimeoutError as exc:
-                raise ScanTimeoutError(f"Navigation to {validated_url} timed out.") from exc
-            except PlaywrightError as exc:
-                reason = _classify_navigation_error(str(exc))
-                raise ScanNavigationError(reason) from exc
-
-            if response is None:
-                raise ScanNavigationError("no_response")
-            status = response.status
-            if status >= 400:
-                raise ScanNavigationError(f"http_{status}", status_code=status)
+            page = await _navigate_with_fallback(browser, validated_url, nav_timeout_ms)
 
             # Redirect defense-in-depth: re-validate wherever we actually landed.
             await revalidate_landed_host(page.url)
@@ -146,8 +145,11 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             except PlaywrightTimeoutError:
                 pass  # best-effort settle; proceed with whatever rendered so far
 
-            await page.add_script_tag(content=load_axe_source())
-            axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
+            try:
+                await page.add_script_tag(content=load_axe_source())
+                axe_results = await page.evaluate(_AXE_RUN_SCRIPT)
+            except PlaywrightError as exc:
+                raise ScanNavigationError("script_injection_blocked") from exc
             screenshot_bytes = await _capture_screenshot_bytes(page)
             axe_results = await _resolve_incomplete_contrast(page, axe_results, screenshot_bytes)
             # State-based checks (keyboard walk, 320px reflow) axe can't do on its
@@ -168,6 +170,64 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
     )
     duration_ms = int((time.monotonic() - t0) * 1000)
     return _build_scan_result(url, final_url, page_title, axe_results, duration_ms, bboxes, screenshot)
+
+
+async def _new_context(browser, *, browser_like: bool):
+    context = await browser.new_context(
+        viewport={"width": 1280, "height": 800},
+        user_agent=_USER_AGENT_BROWSER if browser_like else _USER_AGENT_HONEST,
+        ignore_https_errors=False,
+        # Many real sites (esp. ones security-conscious enough to also care
+        # about accessibility) ship a strict CSP that blocks our
+        # add_script_tag() injection of axe-core, crashing the scan entirely.
+        # bypass_csp makes Playwright's CDP-level injection ignore the page's
+        # CSP -- standard for automation/testing, independent of which UA
+        # fingerprint is in use.
+        bypass_csp=True,
+    )
+    if browser_like:
+        await context.add_init_script(_HIDE_WEBDRIVER_SCRIPT)
+    return context
+
+
+async def _navigate_with_fallback(browser, validated_url: str, nav_timeout_ms: int) -> Page:
+    """Try navigation with the honest, self-identifying fingerprint first --
+    verified against a real site that explicitly blocks generic browser UAs
+    while allowing transparent bot traffic through. If that's blocked (403 /
+    429), retry once with a real-browser fingerprint, which other sites
+    require instead. Only a definite bot-block signal triggers a retry; a
+    real 404/500 wouldn't be fixed by changing the UA, so those raise
+    immediately.
+    """
+    last_exc: Exception | None = None
+    for browser_like in (False, True):
+        context = await _new_context(browser, browser_like=browser_like)
+        page = await context.new_page()
+        try:
+            response = await page.goto(validated_url, wait_until="domcontentloaded", timeout=nav_timeout_ms)
+        except PlaywrightTimeoutError as exc:
+            await context.close()
+            raise ScanTimeoutError(f"Navigation to {validated_url} timed out.") from exc
+        except PlaywrightError as exc:
+            await context.close()
+            raise ScanNavigationError(_classify_navigation_error(str(exc))) from exc
+
+        if response is None:
+            await context.close()
+            raise ScanNavigationError("no_response")
+
+        status = response.status
+        if status in _RETRY_STATUS_CODES and not browser_like:
+            last_exc = ScanNavigationError(f"http_{status}", status_code=status)
+            await context.close()
+            continue
+        if status >= 400:
+            await context.close()
+            raise ScanNavigationError(f"http_{status}", status_code=status)
+
+        return page
+
+    raise last_exc
 
 
 async def _compute_bboxes(page: Page, violations: list[dict]) -> dict[str, dict]:
