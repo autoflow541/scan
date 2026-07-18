@@ -2,6 +2,7 @@ const STATUS_LABELS = {
   supports: "Supports",
   does_not_support: "Does Not Support",
   needs_review: "Needs Review",
+  not_applicable: "Not Applicable",
 };
 
 export default function ConformanceTable({ rows }) {

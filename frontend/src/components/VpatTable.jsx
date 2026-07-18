@@ -2,7 +2,8 @@ const LEVEL_CLASS = {
   "Supports": "supports",
   "Partially Supports": "partial",
   "Does Not Support": "does_not_support",
-  "Not Evaluated": "na",
+  "Not Applicable": "not_applicable",
+  "Not Evaluated": "not_evaluated",
 };
 
 function LevelTable({ caption, rows }) {
@@ -24,7 +25,7 @@ function LevelTable({ caption, rows }) {
               {row.num} {row.title}
             </th>
             <td>
-              <span className={`conformance-status conformance-status--${LEVEL_CLASS[row.conformance] || "na"}`}>
+              <span className={`conformance-status conformance-status--${LEVEL_CLASS[row.conformance] || "not_evaluated"}`}>
                 {row.conformance}
               </span>
             </td>

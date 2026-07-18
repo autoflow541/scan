@@ -54,10 +54,11 @@ class PassItem(BaseModel):
 
 class ConformanceRow(BaseModel):
     criterion: str
-    status: str  # "supports" | "does_not_support" | "needs_review"
+    status: str  # "supports" | "does_not_support" | "needs_review" | "not_applicable"
     passed_rules: list[str] = Field(max_length=100)
     failed_rules: list[str] = Field(max_length=100)
     review_rules: list[str] = Field(max_length=100)
+    na_rules: list[str] = Field(default_factory=list, max_length=100)
 
 
 class VpatRow(BaseModel):

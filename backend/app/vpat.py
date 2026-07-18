@@ -19,11 +19,14 @@ from datetime import datetime, timezone
 
 from .wcag_catalog import WCAG_22_A_AA, sc_sort_key
 
-# Standard VPAT 2.x conformance terms, plus "Not Evaluated" for criteria
-# outside the reach of automated tooling (disclosed, never inferred).
+# Standard VPAT 2.x conformance terms. "Not Applicable" and "Not Evaluated"
+# are both standard VPAT terms but mean different things: NA is a positive
+# result (we checked; the content this criterion governs isn't present on
+# the page), while Not Evaluated is a disclosed gap (nothing checked it).
 SUPPORTS = "Supports"
 PARTIALLY = "Partially Supports"
 DOES_NOT = "Does Not Support"
+NOT_APPLICABLE = "Not Applicable"
 NOT_EVALUATED = "Not Evaluated"
 
 _AUTOMATED_NOTE = "Based on automated testing only; manual evaluation still required to claim conformance."
@@ -54,6 +57,16 @@ def _row_for(criterion, conf: dict | None) -> dict:
             "remarks": _NOT_TESTABLE_NOTE,
         }
 
+    if conf.get("status") == "not_applicable":
+        na_rules = conf.get("na_rules", [])
+        return {
+            "num": num,
+            "title": title,
+            "level": level,
+            "conformance": NOT_APPLICABLE,
+            "remarks": f"Automated checks confirmed the content this criterion covers is not present on this page ({', '.join(na_rules)}).",
+        }
+
     failed = conf.get("failed_rules", [])
     passed = conf.get("passed_rules", [])
     review = conf.get("review_rules", [])
@@ -81,7 +94,7 @@ def build_vpat(conformance_rows: list[dict]) -> list[dict]:
 
 def vpat_summary(rows: list[dict]) -> dict[str, int]:
     """Count rows by conformance level for an at-a-glance header."""
-    out = {SUPPORTS: 0, PARTIALLY: 0, DOES_NOT: 0, NOT_EVALUATED: 0}
+    out = {SUPPORTS: 0, PARTIALLY: 0, DOES_NOT: 0, NOT_APPLICABLE: 0, NOT_EVALUATED: 0}
     for r in rows:
         out[r["conformance"]] = out.get(r["conformance"], 0) + 1
     return out
@@ -93,7 +106,8 @@ _CONF_CLASS = {
     SUPPORTS: "c-supports",
     PARTIALLY: "c-partial",
     DOES_NOT: "c-fail",
-    NOT_EVALUATED: "c-na",
+    NOT_APPLICABLE: "c-na",
+    NOT_EVALUATED: "c-not-evaluated",
 }
 
 
@@ -144,6 +158,7 @@ def render_vpat_html(
   td.c-partial  {{ color: #8a5a00; font-weight: 700; }}
   td.c-fail     {{ color: #a3232b; font-weight: 700; }}
   td.c-na       {{ color: #5a5348; font-weight: 700; }}
+  td.c-not-evaluated {{ color: #8a7a5c; font-style: italic; }}
   .meta {{ background: #faf8f4; border: 1px solid #e0d4c0; border-radius: 8px; padding: 1rem 1.25rem; }}
   .meta dt {{ font-weight: 700; }} .meta dd {{ margin: 0 0 0.5rem; }}
   .note {{ font-size: 0.85rem; color: #5a5348; }}

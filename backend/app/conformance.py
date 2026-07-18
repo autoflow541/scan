@@ -1,8 +1,16 @@
 """Builds a VPAT-style per-criterion conformance summary from axe-core's
-violations/passes/incomplete results -- not just a list of failures, but a
-row per WCAG success criterion actually exercised by the scan, showing
-whether it Supports (all checks passed), Does Not Support (has a violation),
-or Needs Review (only ambiguous/manual-check items, no outright violation).
+violations/passes/incomplete/inapplicable results -- not just a list of
+failures, but a row per WCAG success criterion the scan actually reasoned
+about, showing whether it Supports (all checks passed), Does Not Support
+(has a violation), Needs Review (only ambiguous/manual-check items), or Not
+Applicable (axe checked and the criterion's rules genuinely don't apply to
+this page -- e.g. caption rules on a page with no audio/video at all).
+
+Not Applicable matters as its own status, not a fold into "Not Evaluated":
+axe DID run these rules and DID determine they don't apply here, which is a
+real, positive result -- collapsing it into "we never checked" understates
+coverage and (via scoring.py) would otherwise unfairly penalize a page for
+"not supporting" something that isn't even present.
 """
 from __future__ import annotations
 
@@ -16,7 +24,10 @@ def _sc_sort_key(label: str) -> tuple[int, ...]:
 
 
 def build_conformance(
-    violations: list[dict], passes: list[dict], incomplete: list[dict]
+    violations: list[dict],
+    passes: list[dict],
+    incomplete: list[dict],
+    inapplicable: list[dict] | None = None,
 ) -> list[dict]:
     by_criterion: dict[str, dict[str, set[str]]] = {}
 
@@ -24,7 +35,9 @@ def build_conformance(
         criterion = primary_criterion(tags)
         if criterion is None:
             return
-        entry = by_criterion.setdefault(criterion, {"pass": set(), "fail": set(), "review": set()})
+        entry = by_criterion.setdefault(
+            criterion, {"pass": set(), "fail": set(), "review": set(), "na": set()}
+        )
         entry[bucket].add(rule_id)
 
     for v in violations:
@@ -33,6 +46,8 @@ def build_conformance(
         note(p.get("tags", []), p.get("id", ""), "pass")
     for i in incomplete:
         note(i.get("tags", []), i.get("id", ""), "review")
+    for i in inapplicable or []:
+        note(i.get("tags", []), i.get("id", ""), "na")
 
     rows = []
     for criterion in sorted(by_criterion, key=_sc_sort_key):
@@ -41,8 +56,14 @@ def build_conformance(
             status = "does_not_support"
         elif entry["review"]:
             status = "needs_review"
-        else:
+        elif entry["pass"]:
             status = "supports"
+        elif entry["na"]:
+            # Only real evidence for this criterion is "checked, didn't
+            # apply" -- e.g. video-caption ran and found no <video> at all.
+            status = "not_applicable"
+        else:
+            status = "supports"  # unreachable in practice; every bucket empty means note() was never called
         rows.append(
             {
                 "criterion": criterion,
@@ -50,6 +71,7 @@ def build_conformance(
                 "passed_rules": sorted(entry["pass"]),
                 "failed_rules": sorted(entry["fail"]),
                 "review_rules": sorted(entry["review"]),
+                "na_rules": sorted(entry["na"]),
             }
         )
     return rows

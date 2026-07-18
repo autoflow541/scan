@@ -224,7 +224,8 @@ a { color: var(--accent-deep); }
 .conformance-status--does_not_support{ color: var(--critical); background: var(--critical-bg); }
 .conformance-status--needs_review    { color: var(--moderate); background: var(--moderate-bg); }
 .conformance-status--partial         { color: var(--serious); background: var(--serious-bg); }
-.conformance-status--na              { color: var(--text-3); background: var(--bg-warm); }
+.conformance-status--not_applicable  { color: var(--text-3); background: var(--bg-warm); }
+.conformance-status--not_evaluated   { color: var(--text-3); background: var(--bg-warm); font-style: italic; }
 
 /* --- Export bar --- */
 .export-bar {

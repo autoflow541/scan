@@ -1,5 +1,6 @@
 from app.vpat import (
     DOES_NOT,
+    NOT_APPLICABLE,
     NOT_EVALUATED,
     PARTIALLY,
     SUPPORTS,
@@ -45,6 +46,17 @@ def test_only_review_is_not_evaluated():
     conf = [{"criterion": "1.4.3 Contrast (Minimum)", "status": "needs_review",
              "passed_rules": [], "failed_rules": [], "review_rules": ["color-contrast"]}]
     assert _find(build_vpat(conf), "1.4.3")["conformance"] == NOT_EVALUATED
+
+
+def test_not_applicable_maps_to_not_applicable_not_not_evaluated():
+    """axe genuinely checked (e.g. video-caption ran, found no <video>) --
+    that's a real result, distinct from a criterion nothing ever exercised."""
+    conf = [{"criterion": "1.2.2 Captions (Prerecorded)", "status": "not_applicable",
+             "passed_rules": [], "failed_rules": [], "review_rules": [], "na_rules": ["video-caption"]}]
+    row = _find(build_vpat(conf), "1.2.2")
+    assert row["conformance"] == NOT_APPLICABLE
+    assert row["conformance"] != NOT_EVALUATED
+    assert "video-caption" in row["remarks"]
 
 
 def test_summary_counts_add_up():

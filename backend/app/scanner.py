@@ -60,7 +60,7 @@ _MOBILE_VIEWPORT = {"width": 320, "height": 512}
 _AXE_RUN_SCRIPT = """
 async () => {
   return await axe.run(document, {
-    resultTypes: ["violations", "passes", "incomplete"],
+    resultTypes: ["violations", "passes", "incomplete", "inapplicable"],
     runOnly: { type: "tag", values: %s },
   });
 }
@@ -246,7 +246,7 @@ async def _run_mobile_axe_pass(page: Page) -> dict:
     means we miss mobile-only findings, not that the whole scan fails --
     the desktop results already collected are worth keeping regardless.
     """
-    empty = {"violations": [], "passes": [], "incomplete": []}
+    empty = {"violations": [], "passes": [], "incomplete": [], "inapplicable": []}
     try:
         await page.set_viewport_size(_MOBILE_VIEWPORT)
         await page.wait_for_timeout(250)  # let responsive CSS settle
@@ -262,9 +262,12 @@ async def _run_mobile_axe_pass(page: Page) -> dict:
     return results
 
 
+_AXE_BUCKETS = ("violations", "passes", "incomplete", "inapplicable")
+
+
 def _merge_mobile_axe_results(desktop: dict, mobile: dict) -> dict:
-    merged = {bucket: list(desktop.get(bucket, [])) for bucket in ("violations", "passes", "incomplete")}
-    for bucket in ("violations", "passes", "incomplete"):
+    merged = {bucket: list(desktop.get(bucket, [])) for bucket in _AXE_BUCKETS}
+    for bucket in _AXE_BUCKETS:
         for entry in mobile.get(bucket, []):
             _merge_axe_entry(merged[bucket], entry)
     return merged
@@ -467,6 +470,7 @@ def _build_scan_result(
     violations = axe_results.get("violations", [])
     passes = axe_results.get("passes", [])
     incomplete = axe_results.get("incomplete", [])
+    inapplicable = axe_results.get("inapplicable", [])
 
     counts = {"critical": 0, "serious": 0, "moderate": 0, "minor": 0}
     issues: list[Issue] = []
@@ -512,7 +516,7 @@ def _build_scan_result(
         for p in sorted(passes, key=lambda p: p.get("id", ""))
     ]
 
-    conformance_rows = build_conformance(violations, passes, incomplete)
+    conformance_rows = build_conformance(violations, passes, incomplete, inapplicable)
     conformance = [ConformanceRow(**row) for row in conformance_rows]
 
     vpat_rows = build_vpat(conformance_rows)
