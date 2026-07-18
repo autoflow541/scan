@@ -92,15 +92,23 @@ def _client_ip(request: Request) -> str:
     container binds 127.0.0.1:8001 -- see deploy/setup-vm.sh -- so nothing
     external can hit it directly), and Caddy's reverse_proxy sets
     X-Forwarded-For on every request by default. Without this, every request
-    arrives from Caddy's own loopback connection and request.client.host is
-    always 127.0.0.1 -- meaning ALL visitors would share one rate-limit
-    bucket instead of getting their own, so one busy visitor could lock
-    everyone else out. Take the leftmost (original client) address; local
-    dev without Caddy in front just falls back to the direct connection.
+    arrives from Caddy's own connection and request.client.host is the same
+    for every visitor -- meaning everyone would share one rate-limit bucket
+    instead of getting their own, so one busy visitor could lock everyone
+    else out.
+
+    Take the LAST entry, not the first. Caddy *appends* to any
+    X-Forwarded-For a client already sent rather than replacing it, so nothing
+    stops a client from sending their own "X-Forwarded-For: 1.2.3.4" directly.
+    With exactly one trusted hop in front of this process, the last entry is
+    the one Caddy itself added from the real TCP connection -- the only value
+    a client can't forge. Taking the first entry would trust attacker-supplied
+    data and make the limiter trivially bypassable by rotating a fake value
+    on every request -- worse than not reading the header at all.
     """
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        return forwarded.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 

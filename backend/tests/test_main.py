@@ -18,9 +18,32 @@ def test_uses_x_forwarded_for_when_present():
     assert _client_ip(req) == "198.51.100.9"
 
 
-def test_takes_leftmost_ip_from_forwarded_chain():
-    req = _make_request(headers={"X-Forwarded-For": "198.51.100.9, 10.0.0.1, 127.0.0.1"}, client_host="127.0.0.1")
+def test_takes_rightmost_ip_from_forwarded_chain():
+    """The rightmost entry is the one Caddy itself appended from the real
+    TCP connection -- the trustworthy one when there's a single proxy hop."""
+    req = _make_request(headers={"X-Forwarded-For": "10.0.0.1, 198.51.100.9"}, client_host="127.0.0.1")
     assert _client_ip(req) == "198.51.100.9"
+
+
+def test_client_supplied_leading_ip_is_not_trusted():
+    """Guards against the exact bypass a naive "take the first entry" fix
+    would introduce: a client can send their own X-Forwarded-For directly.
+    Caddy appends its own observed IP rather than replacing it, so the
+    attacker-controlled entry must NOT be the one that wins -- otherwise
+    rotating a fake leading value on every request gives an unlimited
+    supply of fresh rate-limit buckets."""
+    spoofed = _make_request(
+        headers={"X-Forwarded-For": "1.2.3.4"},  # attacker-supplied, forwarded on by Caddy
+        client_host="127.0.0.1",
+    )
+    # Simulate what Caddy actually does: append its own observed peer address
+    # rather than trust the client's claim.
+    real_caddy_view = _make_request(
+        headers={"X-Forwarded-For": "1.2.3.4, 198.51.100.9"},
+        client_host="127.0.0.1",
+    )
+    assert _client_ip(real_caddy_view) == "198.51.100.9"
+    assert _client_ip(real_caddy_view) != "1.2.3.4"
 
 
 def test_falls_back_to_direct_connection_without_proxy_header():
