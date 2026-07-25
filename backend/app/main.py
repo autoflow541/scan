@@ -121,6 +121,7 @@ def health() -> dict:
 async def scan(req: ScanRequest, request: Request) -> ScanResult:
     client_ip = _client_ip(request)
     if not _rate_limiter.check(client_ip):
+        log.warning("Rate limited: ip=%s url=%r", client_ip, req.url)
         raise HTTPException(
             status_code=429,
             detail="Too many scans from this address. Try again in a bit.",
@@ -133,6 +134,7 @@ async def scan(req: ScanRequest, request: Request) -> ScanResult:
             await asyncio.wait_for(_scan_semaphore.acquire(), timeout=_SEMAPHORE_WAIT_S)
             acquired = True
         except asyncio.TimeoutError:
+            log.warning("Scanner busy, rejected: ip=%s url=%r", client_ip, req.url)
             raise HTTPException(status_code=503, detail="Scanner is busy. Try again shortly.")
 
         try:
@@ -141,17 +143,23 @@ async def scan(req: ScanRequest, request: Request) -> ScanResult:
             if acquired:
                 _scan_semaphore.release()
     except UrlValidationError as exc:
+        log.info("Rejected URL: ip=%s url=%r reason=%s", client_ip, req.url, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ScanNavigationError as exc:
+        log.info("Navigation failed: ip=%s url=%r reason=%s", client_ip, req.url, exc.reason)
         if exc.reason == "script_injection_blocked":
             detail = "This page's security policy blocks our scanner from running (a strict Content-Security-Policy). We couldn't test it automatically -- a manual audit can still cover it."
         else:
             detail = f"Could not load that page ({exc.reason})."
         raise HTTPException(status_code=422, detail=detail) from exc
     except (ScanTimeoutError, asyncio.TimeoutError):
+        log.warning("Scan timed out: ip=%s url=%r", client_ip, req.url)
         raise HTTPException(status_code=504, detail="Scan timed out. The page may be too slow or unreachable.")
 
-    log.info("SCAN done url=%r score=%d issues=%d", req.url, result.score, len(result.issues))
+    log.info(
+        "SCAN done ip=%s url=%r score=%d issues=%d duration_ms=%d",
+        client_ip, req.url, result.score, len(result.issues), result.scan_duration_ms,
+    )
     return result
 
 
@@ -166,7 +174,9 @@ async def vpat(result: ScanResult, request: Request) -> HTMLResponse:
     HTML VPAT / ACR document. Stateless formatting only -- no browser launch,
     so it's on a lighter, separate rate limit than /scan rather than none.
     """
-    if not _export_rate_limiter.check(_client_ip(request)):
+    client_ip = _client_ip(request)
+    if not _export_rate_limiter.check(client_ip):
+        log.warning("Export rate limited: ip=%s path=%s", client_ip, request.url.path)
         raise HTTPException(status_code=429, detail="Too many requests. Try again in a bit.", headers={"Retry-After": "5"})
     doc = render_vpat_html(
         url=result.url,
@@ -189,7 +199,9 @@ async def vpat(result: ScanResult, request: Request) -> HTMLResponse:
 async def issues_csv(result: ScanResult, request: Request) -> Response:
     """Turn a ScanResult (from /scan) into a downloadable CSV worklist -- one
     row per offending element. Stateless formatting only; no scanning."""
-    if not _export_rate_limiter.check(_client_ip(request)):
+    client_ip = _client_ip(request)
+    if not _export_rate_limiter.check(client_ip):
+        log.warning("Export rate limited: ip=%s path=%s", client_ip, request.url.path)
         raise HTTPException(status_code=429, detail="Too many requests. Try again in a bit.", headers={"Retry-After": "5"})
     csv_text = issues_to_csv(result)
     return Response(

@@ -161,6 +161,14 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             # injected in this page from the desktop run above.
             mobile_axe_results = await _run_mobile_axe_pass(page)
             axe_results = _merge_mobile_axe_results(axe_results, mobile_axe_results)
+            mobile_only_count = sum(
+                1
+                for v in axe_results.get("violations", [])
+                for n in v.get("nodes", [])
+                if n.get("mobileOnly")
+            )
+            if mobile_only_count:
+                log.info("Mobile pass found %d mobile-only violation node(s): url=%r", mobile_only_count, validated_url)
             screenshot_bytes = await _capture_screenshot_bytes(page)
             axe_results = await _resolve_incomplete_contrast(page, axe_results, screenshot_bytes)
             # State-based checks (keyboard walk, 320px reflow) axe can't do on its
@@ -236,6 +244,8 @@ async def _navigate_with_fallback(browser, validated_url: str, nav_timeout_ms: i
             await context.close()
             raise ScanNavigationError(f"http_{status}", status_code=status)
 
+        if browser_like:
+            log.info("Fingerprint fallback succeeded: url=%r (honest UA got %s)", validated_url, last_exc)
         return page
 
     raise last_exc
@@ -410,6 +420,10 @@ async def _resolve_incomplete_contrast(
         _merge_nodes_into(axe_results.setdefault("violations", []), item, resolved_fail, default_impact="serious")
     if resolved_pass:
         _merge_nodes_into(axe_results.setdefault("passes", []), item, resolved_pass)
+    log.info(
+        "Contrast resolution: %d resolved-pass, %d resolved-fail, %d unresolved (of %d incomplete)",
+        len(resolved_pass), len(resolved_fail), len(unresolved), len(to_process),
+    )
 
     return axe_results
 
