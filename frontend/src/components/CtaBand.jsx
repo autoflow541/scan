@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { submitLead } from "../api.js";
+
 // Copy is tailored to the actual score so the pitch reads as earned, not
 // boilerplate -- always honest about what automated testing can and can't
 // tell you (matches the VPAT's own framing), never inflates the finding.
@@ -26,8 +29,25 @@ function pitchFor(score) {
   };
 }
 
-export default function CtaBand({ score }) {
+export default function CtaBand({ score, scannedUrl }) {
   const { heading, body } = pitchFor(score);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | submitting | success | error
+  const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setStatus("submitting");
+    setErrorMessage("");
+    try {
+      await submitLead({ email, scannedUrl, score: score ?? null });
+      setStatus("success");
+    } catch (err) {
+      setErrorMessage(err.message || "Something went wrong. Please try again.");
+      setStatus("error");
+    }
+  }
+
   return (
     <div className="cta-band">
       <h2>{heading}</h2>
@@ -35,6 +55,35 @@ export default function CtaBand({ score }) {
       <a className="btn-primary" href="https://auto-flow.co" target="_blank" rel="noopener noreferrer">
         Request a full audit
       </a>
+
+      {status === "success" ? (
+        <p className="cta-lead-success" role="status">
+          Thanks -- we'll follow up at {email}.
+        </p>
+      ) : (
+        <form className="cta-lead-form" onSubmit={handleSubmit}>
+          <label htmlFor="cta-lead-email" className="cta-lead-label">
+            Or leave your email and we'll reach out about a full audit
+          </label>
+          <div className="cta-lead-row">
+            <input
+              id="cta-lead-email"
+              type="email"
+              required
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={status === "submitting"}
+            />
+            <button type="submit" className="btn-secondary" disabled={status === "submitting"}>
+              {status === "submitting" ? "Sending..." : "Contact me"}
+            </button>
+          </div>
+          {status === "error" && (
+            <p className="cta-lead-error" role="alert">{errorMessage}</p>
+          )}
+        </form>
+      )}
     </div>
   );
 }

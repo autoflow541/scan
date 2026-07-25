@@ -66,6 +66,9 @@ to run these unit tests outside the container.)
 | Endpoint | Description |
 |---|---|
 | `POST /scan` | `{ "url": "https://..." }` -> scan report JSON |
+| `POST /vpat` | Scan result JSON -> downloadable VPAT/ACR HTML |
+| `POST /issues.csv` | Scan result JSON -> downloadable CSV worklist |
+| `POST /lead` | `{ "email", "scanned_url", "score" }` -> capture a CTA lead (rate limited, logged server-side to a host-mounted file; see `LEADS_DIR`) |
 | `GET /health` | Health check |
 
 Full docs: [scan.auto-flow.co/docs](https://scan.auto-flow.co/docs)

@@ -292,6 +292,20 @@ a { color: var(--accent-deep); }
 }
 .btn-primary:hover { background: #6f3200; }
 
+.cta-lead-form { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 0.4rem; }
+.cta-lead-label { font-size: 0.82rem; color: var(--text-2); }
+.cta-lead-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cta-lead-row input {
+  flex: 1 1 200px; font-family: var(--font-body); font-size: 0.95rem;
+  padding: 0.6rem 0.85rem; border: 1px solid var(--border-2);
+  border-radius: var(--radius); background: var(--bg-card); color: var(--text);
+  min-height: 44px;
+}
+.cta-lead-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cta-lead-row input:disabled { opacity: 0.6; }
+.cta-lead-success { color: var(--supports); font-weight: 700; }
+.cta-lead-error { color: var(--critical); font-size: 0.85rem; margin: 0; }
+
 .app-footer {
   text-align: center; padding: 1.5rem; color: var(--text-3); font-size: 0.85rem;
 }

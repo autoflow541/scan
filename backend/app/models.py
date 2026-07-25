@@ -10,6 +10,12 @@ class ScanRequest(BaseModel):
     url: str
 
 
+class LeadRequest(BaseModel):
+    email: str = Field(max_length=254)
+    scanned_url: str = Field(max_length=2000)
+    score: int | None = None
+
+
 class Bbox(BaseModel):
     x: float
     y: float

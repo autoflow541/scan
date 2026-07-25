@@ -58,3 +58,18 @@ export function downloadJson(result) {
   const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
   triggerDownload(blob, "accessibility-scan.json");
 }
+
+export async function submitLead({ email, scannedUrl, score }) {
+  const res = await fetch("/lead", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, scanned_url: scannedUrl || "", score: score ?? null }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err = new Error((body && body.detail) || `Couldn't submit that (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return body;
+}

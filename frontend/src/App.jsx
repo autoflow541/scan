@@ -74,7 +74,7 @@ export default function App() {
           </>
         )}
 
-        <CtaBand score={result?.score} />
+        <CtaBand score={result?.score} scannedUrl={result?.final_url} />
       </main>
 
       <footer className="app-footer">

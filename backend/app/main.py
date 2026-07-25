@@ -18,7 +18,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .csv_export import issues_to_csv
-from .models import ScanRequest, ScanResult
+from .leads import InvalidEmailError, record_lead, validate_email
+from .models import LeadRequest, ScanRequest, ScanResult
 from .rate_limit import RateLimiter
 from .scanner import ScanNavigationError, ScanTimeoutError, run_scan
 from .url_safety import UrlValidationError
@@ -83,6 +84,10 @@ _OVERALL_TIMEOUT_S = 35.0
 # arbitrary client-supplied JSON bodies. A separate bucket keeps that traffic
 # from being able to starve real scans' tokens on the main limiter.
 _export_rate_limiter = RateLimiter(capacity=20, refill_per_sec=1 / 5)
+
+# Deliberately tight -- a real visitor submits this once per scan at most;
+# anything bursty here is spam, not legitimate use.
+_lead_rate_limiter = RateLimiter(capacity=3, refill_per_sec=1 / 60)
 
 
 def _client_ip(request: Request) -> str:
@@ -209,6 +214,26 @@ async def issues_csv(result: ScanResult, request: Request) -> Response:
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": 'attachment; filename="accessibility-issues.csv"'},
     )
+
+
+@app.post("/lead", tags=["core"], summary="Capture a lead from the CTA band")
+async def lead(req: LeadRequest, request: Request) -> dict:
+    """Someone liked what the scan showed and wants to be contacted about a
+    full audit. No email service wired up yet (see leads.py) -- appended to
+    a host-mounted file for now; check it via the deploy docs."""
+    client_ip = _client_ip(request)
+    if not _lead_rate_limiter.check(client_ip):
+        log.warning("Lead rate limited: ip=%s", client_ip)
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a bit.", headers={"Retry-After": "60"})
+    try:
+        email = validate_email(req.email)
+    except InvalidEmailError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        record_lead(email=email, scanned_url=req.scanned_url, score=req.score, client_ip=client_ip)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Couldn't save that right now. Please try again shortly.")
+    return {"status": "ok"}
 
 
 # Serve the built frontend (React/Vite) from the same container/process as the

@@ -21,6 +21,7 @@ CORS_ORIGINS="${CORS_ORIGINS:-*}"
 MAX_CONCURRENT_SCANS="${MAX_CONCURRENT_SCANS:-3}"
 REPO_DIR="${REPO_DIR:-$HOME/scan}"
 CADDY_CFG="/etc/caddy/Caddyfile"
+LEADS_DIR="${LEADS_DIR:-$HOME/scan-leads}"
 
 echo "==> [1/6] Installing Docker"
 if ! command -v docker &>/dev/null; then
@@ -50,6 +51,11 @@ cd "$REPO_DIR"
 docker build -f docker/Dockerfile -t scan-engine .
 
 echo "==> [4/6] Starting the engine container"
+# Host-mounted so captured leads survive the `docker rm -f` below on every
+# future redeploy -- a container-internal path would not. uid 10001 matches
+# the non-root `appuser` the image runs as (see docker/Dockerfile).
+mkdir -p "$LEADS_DIR"
+sudo chown 10001:10001 "$LEADS_DIR"
 docker rm -f scan-engine 2>/dev/null || true
 docker run -d \
   --name scan-engine \
@@ -57,6 +63,7 @@ docker run -d \
   -p 127.0.0.1:8001:8001 \
   -e "CORS_ORIGINS=${CORS_ORIGINS}" \
   -e "MAX_CONCURRENT_SCANS=${MAX_CONCURRENT_SCANS}" \
+  -v "${LEADS_DIR}:/app/leads" \
   scan-engine
 
 echo "==> [5/6] Writing Caddyfile and (re)starting Caddy"
