@@ -73,6 +73,24 @@ async def _log_requests(request: Request, call_next):
     return response
 
 
+_NO_CACHE_EXCLUDE = {"/health", "/docs", "/redoc", "/openapi.json"}
+
+
+@app.middleware("http")
+async def _static_cache_headers(request: Request, call_next):
+    """Force revalidation instead of long browser caching on the static
+    frontend bundle. Filenames are stable, not content-hashed (see
+    vite.config.js), so without this a browser that already cached scan.js
+    from a previous visit can silently keep serving a stale build after a
+    deploy until the user manually hard-refreshes. StaticFiles already sets
+    ETag/Last-Modified, so this just forces a conditional request each load
+    -- a cheap 304 when nothing changed, a real fetch when it has."""
+    response = await call_next(request)
+    if request.method == "GET" and request.url.path not in _NO_CACHE_EXCLUDE:
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 _rate_limiter = RateLimiter(capacity=5, refill_per_sec=1 / 30)
 _scan_semaphore = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT_SCANS", "3")))
 _SEMAPHORE_WAIT_S = 2.0
