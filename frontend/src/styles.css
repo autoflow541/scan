@@ -212,6 +212,23 @@ a { color: var(--accent-deep); }
 }
 .conformance-title { font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem; }
 .conformance-sub { color: var(--text-3); font-size: 0.85rem; margin-bottom: 1rem; }
+
+.coverage-summary { margin-bottom: 1.25rem; }
+.coverage-stat { font-size: 0.95rem; margin: 0 0 0.5rem; }
+.coverage-gaps { font-size: 0.85rem; }
+.coverage-gaps > summary { cursor: pointer; color: var(--accent-deep); font-weight: 700; list-style: none; }
+.coverage-gaps > summary::-webkit-details-marker { display: none; }
+.coverage-gaps > summary::before { content: "\25B8"; margin-right: 0.35rem; color: var(--accent-deep); }
+.coverage-gaps[open] > summary::before { content: "\25BE"; }
+.coverage-gaps-list {
+  list-style: none; margin: 0.6rem 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+}
+.coverage-gaps-list li {
+  font-size: 0.8rem; color: var(--text-3); background: var(--bg-warm);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.2rem 0.65rem;
+}
+.coverage-gap-num { font-weight: 700; color: var(--text-2); }
 .table-scroll { overflow-x: auto; max-width: 100%; }
 .conformance-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .conformance-table th { text-align: left; color: var(--text-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }

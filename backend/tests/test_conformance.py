@@ -81,3 +81,22 @@ def test_fail_takes_precedence_over_inapplicable_for_same_criterion():
     inapplicable = [{"id": "server-side-image-map", "tags": ["wcag211"]}]
     rows = build_conformance(violations, [], [], inapplicable)
     assert rows[0]["status"] == "does_not_support"
+
+
+def test_best_practice_rule_maps_via_id_override():
+    """heading-order/accesskeys carry no formal wcagNNN tag from axe itself,
+    but are mapped onto a specific criterion via RULE_ID_CRITERION_OVERRIDE
+    (see wcag_map.py) so they still count as real coverage, not silently
+    dropped like other untagged best-practice rules."""
+    violations = [{"id": "heading-order", "tags": ["cat.semantics", "best-practice"]}]
+    rows = build_conformance(violations, [], [])
+    assert rows == [
+        {
+            "criterion": "2.4.6 Headings and Labels",
+            "status": "does_not_support",
+            "passed_rules": [],
+            "failed_rules": ["heading-order"],
+            "review_rules": [],
+            "na_rules": [],
+        }
+    ]

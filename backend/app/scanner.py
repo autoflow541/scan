@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -30,7 +31,17 @@ log = logging.getLogger(__name__)
 
 _MAX_NODES_PER_ISSUE = 5
 _MAX_HTML_CHARS = 300
-_AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]
+_AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
+# "best-practice" pulls in ~30 more rules (landmarks, heading structure, aria
+# roles, accesskeys, skip links, table markup) that axe doesn't tag with a
+# formal wcagNNN criterion but that substantively test WCAG-relevant
+# structure -- see wcag_map.RULE_ID_CRITERION_OVERRIDE for the handful mapped
+# onto a specific criterion. These three are excluded even so: axe itself
+# tags them 'experimental' or 'review-item', meaning axe's own maintainers
+# don't consider them reliable enough for unattended/CI-style use -- exactly
+# this tool's use case, run against arbitrary public pages with no human
+# reviewing axe's raw output before it's shown as a pass/fail verdict.
+_DISABLED_RULES = ["frame-tested", "hidden-content", "focus-order-semantics"]
 # Two fingerprints, tried in order (see _navigate_with_fallback). Neither one
 # is universally best: some sites explicitly allow known, transparent bots
 # and block generic browser-UA traffic that lacks other browser-level
@@ -62,9 +73,10 @@ async () => {
   return await axe.run(document, {
     resultTypes: ["violations", "passes", "incomplete", "inapplicable"],
     runOnly: { type: "tag", values: %s },
+    rules: %s,
   });
 }
-""" % _AXE_TAGS
+""" % (_AXE_TAGS, json.dumps({rule_id: {"enabled": False} for rule_id in _DISABLED_RULES}))
 
 _BBOX_SCRIPT = """
 (selectors) => selectors.map((sel) => {
@@ -496,7 +508,7 @@ def _build_scan_result(
             Issue(
                 id=v.get("id", ""),
                 impact=impact,
-                wcag_criterion=primary_criterion(v.get("tags", [])),
+                wcag_criterion=primary_criterion(v.get("tags", []), v.get("id")),
                 tags=v.get("tags", []),
                 description=v.get("description", ""),
                 help=v.get("help", ""),
@@ -520,7 +532,7 @@ def _build_scan_result(
     pass_items = [
         PassItem(
             id=p.get("id", ""),
-            wcag_criterion=primary_criterion(p.get("tags", [])),
+            wcag_criterion=primary_criterion(p.get("tags", []), p.get("id")),
             tags=p.get("tags", []),
             description=p.get("description", ""),
             help=p.get("help", ""),

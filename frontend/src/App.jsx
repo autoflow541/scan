@@ -67,7 +67,7 @@ export default function App() {
             </div>
             <ExportBar result={result} />
             <PageScreenshot screenshot={result.screenshot} issues={result.issues} />
-            <ConformanceTable rows={result.conformance} />
+            <ConformanceTable rows={result.conformance} vpatRows={result.vpat} />
             <VpatTable rows={result.vpat} summary={result.vpat_summary} />
             <IssueList issues={result.issues} incompleteCount={result.incomplete_count} />
             <PassList passes={result.passes} />

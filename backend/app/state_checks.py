@@ -13,6 +13,7 @@ Criteria added here:
   2.4.7  Focus Visible           -- keyboard-focused element shows no indicator
   2.1.2  No Keyboard Trap        -- focus gets stuck while tabbing (review)
   2.4.11 Focus Not Obscured      -- focused element hidden behind fixed UI (review)
+  4.1.3  Status Messages         -- live-region markup present (review only)
 
 Everything is best-effort: any failure here is swallowed so a state-check bug
 can never take down a scan that axe already completed.
@@ -86,6 +87,7 @@ async def run_state_checks(page: Page) -> dict[str, list]:
         await _focus_order(page, out)
         await _keyboard_walk(page, out)
         await _reflow(page, out)
+        await _status_messages(page, out)
     except PlaywrightError as exc:  # pragma: no cover - defensive
         log.warning("state checks aborted: %s", exc)
     except Exception:  # pragma: no cover - never break a completed scan
@@ -293,3 +295,40 @@ async def _reflow(page: Page, out: dict) -> None:
             f"Content reflowed to the {_MOBILE_WIDTH}px viewport without horizontal scrolling.",
             "Keep layouts responsive down to 320px.", "reflow", [],
         ))
+
+
+async def _status_messages(page: Page, out: dict) -> None:
+    """4.1.3 Status Messages -- positive-detection only. Finding live-region
+    markup (role="status"/"alert"/"log" or aria-live) proves nothing about
+    whether messages are actually announced correctly, so a hit is flagged
+    for manual review, never a pass. Finding none proves nothing either --
+    a page can add live regions dynamically, after some interaction this
+    scan never triggers -- so absence emits nothing at all and the criterion
+    stays honestly "Not Evaluated" rather than a false "Not Applicable"."""
+    script = "(() => {" + _PRELUDE + r"""
+      const els = document.querySelectorAll(
+        '[role="status"],[role="alert"],[role="log"],[aria-live]:not([aria-live="off"])'
+      );
+      const found = [];
+      for (const el of els) {
+        found.push({ html: el.outerHTML, sel: cssPath(el) });
+        if (found.length >= 8) break;
+      }
+      return found;
+    })()"""
+    try:
+        found = await page.evaluate(script)
+    except PlaywrightError:
+        return
+    if not found:
+        return
+    nodes = [
+        _node(f["html"], f["sel"], "Live-region markup found; verify status messages are actually announced by assistive technology.")
+        for f in found
+    ]
+    out["incomplete"].append(_entry(
+        "af-status-messages", "wcag413", "wcag21aa", "moderate",
+        "Live-region markup (role/aria-live) is present. Automated checks can't verify assistive technology actually announces these messages -- verify manually.",
+        "Confirm status messages are announced without moving keyboard focus.",
+        "status-messages", nodes,
+    ))

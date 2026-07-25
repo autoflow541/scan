@@ -11,11 +11,12 @@ class FakePage:
     checks can be exercised without a real browser. Returns are dispatched by
     matching on distinctive substrings of each injected script."""
 
-    def __init__(self, *, tabindex_bad=None, count=3, infos=None, reflow=None):
+    def __init__(self, *, tabindex_bad=None, count=3, infos=None, reflow=None, status_messages=None):
         self._tabindex_bad = tabindex_bad or []
         self._count = count
         self._infos = list(infos or [])
         self._reflow = reflow or {"overflow": 0, "clientWidth": 320, "scrollWidth": 320, "offenders": []}
+        self._status_messages = status_messages or []
         self.keyboard = self
 
     async def evaluate(self, script, *args):
@@ -30,6 +31,8 @@ class FakePage:
             return self._infos.pop(0) if self._infos else None
         if "overflow" in s and "offenders" in s:
             return self._reflow
+        if "aria-live" in s:
+            return self._status_messages
         return None
 
     async def press(self, key):
@@ -89,6 +92,27 @@ def test_problems_are_flagged_on_correct_criteria():
     assert "2.4.3 Focus Order" in vio_criteria
     assert "2.4.7 Focus Visible" in vio_criteria
     assert "1.4.10 Reflow" in vio_criteria
+
+
+def test_no_status_message_markup_emits_nothing():
+    """Absence proves nothing -- a page can add live regions dynamically
+    after interaction this scan never triggers -- so no pass/fail/review
+    entry is emitted at all; the criterion stays honestly Not Evaluated."""
+    page = FakePage(count=1, infos=[{"sel": "a", "html": "<a>", "visible": True, "obscured": False, "focusable": True}])
+    out = asyncio.run(run_state_checks(page))
+    assert "af-status-messages" not in _ids(out["violations"] + out["passes"] + out["incomplete"])
+
+
+def test_status_message_markup_found_flags_for_manual_review():
+    page = FakePage(
+        count=1,
+        infos=[{"sel": "a", "html": "<a>", "visible": True, "obscured": False, "focusable": True}],
+        status_messages=[{"html": '<div role="status">', "sel": "div"}],
+    )
+    out = asyncio.run(run_state_checks(page))
+    assert "af-status-messages" in _ids(out["incomplete"])
+    assert "af-status-messages" not in _ids(out["passes"])
+    assert primary_criterion(out["incomplete"][-1]["tags"]) == "4.1.3 Status Messages"
 
 
 def test_results_flow_through_conformance_and_vpat():

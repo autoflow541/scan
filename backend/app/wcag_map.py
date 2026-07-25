@@ -76,10 +76,24 @@ WCAG_TAG_LABELS: dict[str, str] = {
 }
 
 
-def primary_criterion(tags: list[str]) -> str | None:
+# axe-core tags these rules only "best-practice", with no formal wcagNNN tag
+# of its own -- but each one is, in substance, a direct test of a specific
+# success criterion axe otherwise leaves entirely untested. Used as a
+# fallback only when no tag-based match exists, so it never overrides a rule
+# axe itself tagged more specifically.
+RULE_ID_CRITERION_OVERRIDE: dict[str, str] = {
+    "heading-order": "2.4.6 Headings and Labels",
+    "empty-heading": "2.4.6 Headings and Labels",
+    "page-has-heading-one": "2.4.6 Headings and Labels",
+    "accesskeys": "2.1.4 Character Key Shortcuts",
+}
+
+
+def primary_criterion(tags: list[str], rule_id: str | None = None) -> str | None:
     """Pick the most specific wcagNNN criterion tag present (skipping level/
-    category tags) and map it to a human-readable label. Returns None if no
-    specific criterion tag is present.
+    category tags) and map it to a human-readable label. Falls back to
+    RULE_ID_CRITERION_OVERRIDE by rule id if no tag match exists. Returns
+    None if neither yields a criterion.
     """
     for tag in tags:
         if tag in _LEVEL_TAGS or not tag.startswith("wcag"):
@@ -87,4 +101,6 @@ def primary_criterion(tags: list[str]) -> str | None:
         label = WCAG_TAG_LABELS.get(tag)
         if label:
             return label
+    if rule_id:
+        return RULE_ID_CRITERION_OVERRIDE.get(rule_id)
     return None

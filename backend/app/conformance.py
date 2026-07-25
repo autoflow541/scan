@@ -32,7 +32,7 @@ def build_conformance(
     by_criterion: dict[str, dict[str, set[str]]] = {}
 
     def note(tags: list[str], rule_id: str, bucket: str) -> None:
-        criterion = primary_criterion(tags)
+        criterion = primary_criterion(tags, rule_id)
         if criterion is None:
             return
         entry = by_criterion.setdefault(
