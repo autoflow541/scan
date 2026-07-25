@@ -14,26 +14,28 @@ export default function ConformanceTable({ rows }) {
       <p className="conformance-sub">
         Every success criterion this scan actually tested, and whether the page supports it.
       </p>
-      <table className="conformance-table">
-        <thead>
-          <tr>
-            <th scope="col">Success Criterion</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.criterion}>
-              <td>{row.criterion}</td>
-              <td>
-                <span className={`conformance-status conformance-status--${row.status}`}>
-                  {STATUS_LABELS[row.status] || row.status}
-                </span>
-              </td>
+      <div className="table-scroll">
+        <table className="conformance-table">
+          <thead>
+            <tr>
+              <th scope="col">Success Criterion</th>
+              <th scope="col">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.criterion}>
+                <td>{row.criterion}</td>
+                <td>
+                  <span className={`conformance-status conformance-status--${row.status}`}>
+                    {STATUS_LABELS[row.status] || row.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

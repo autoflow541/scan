@@ -9,31 +9,33 @@ const LEVEL_CLASS = {
 function LevelTable({ caption, rows }) {
   if (rows.length === 0) return null;
   return (
-    <table className="conformance-table vpat-table">
-      <caption className="vpat-caption">{caption}</caption>
-      <thead>
-        <tr>
-          <th scope="col">Criteria</th>
-          <th scope="col">Conformance Level</th>
-          <th scope="col">Remarks</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.num}>
-            <th scope="row" className="vpat-sc">
-              {row.num} {row.title}
-            </th>
-            <td>
-              <span className={`conformance-status conformance-status--${LEVEL_CLASS[row.conformance] || "not_evaluated"}`}>
-                {row.conformance}
-              </span>
-            </td>
-            <td className="vpat-remarks">{row.remarks}</td>
+    <div className="table-scroll">
+      <table className="conformance-table vpat-table">
+        <caption className="vpat-caption">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Criteria</th>
+            <th scope="col">Conformance Level</th>
+            <th scope="col">Remarks</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.num}>
+              <th scope="row" className="vpat-sc">
+                {row.num} {row.title}
+              </th>
+              <td>
+                <span className={`conformance-status conformance-status--${LEVEL_CLASS[row.conformance] || "not_evaluated"}`}>
+                  {row.conformance}
+                </span>
+              </td>
+              <td className="vpat-remarks">{row.remarks}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
