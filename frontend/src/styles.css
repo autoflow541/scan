@@ -3,20 +3,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:           #faf8f4;
-  --bg-warm:      #f3ece0;
+  --ink:          #111111;
+  --bg:           #ffffff;
+  --bg-warm:      #f4f4f2;
   --bg-card:      #ffffff;
-  --border:       #e0d4c0;
-  --border-2:     #c4ae90;
-  --text:         #1c1208;
-  --text-2:       #5a4030;
-  --text-3:       #786050;
-  --yellow:       #FFC93C;
-  --yellow-deep:  #e6a800;
-  --accent:       #997000;
-  --accent-deep:  #6b4e00;
-  --accent-bg:    #fff9d6;
-  --accent-border:#ffd966;
+  --border:       #e4e4e1;
+  --border-2:     #767676;
+  --text:         #141414;
+  --text-2:       #3a3a3a;
+  --text-3:       #5f5f5f;
+  --yellow:       #D4A017;
+  --yellow-deep:  #b8860b;
+  --accent:       #7a5e00;
+  --accent-deep:  #7a5e00;
+  --accent-bg:    #fbf1cc;
+  --accent-border:#b8860b;
   --critical:     #a1272a;
   --critical-bg:  #fdecec;
   --serious:      #b5541a;
@@ -24,13 +25,14 @@
   --moderate:     #8a6d00;
   --moderate-bg:  #fff9d6;
   --minor:        #5a4030;
-  --minor-bg:     #f3ece0;
+  --minor-bg:     #f1efec;
   --supports:     #2a6b3f;
   --supports-bg:  #eaf5ee;
   --font-display: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
   --font-body:    'Atkinson Hyperlegible', system-ui, sans-serif;
-  --radius:       8px;
-  --radius-lg:    14px;
+  --radius:       2px;
+  --radius-lg:    3px;
 }
 
 html, body { background: var(--bg); color: var(--text); font-family: var(--font-body); }
@@ -38,29 +40,34 @@ html, body { background: var(--bg); color: var(--text); font-family: var(--font-
 
 .skip-link {
   position: absolute; left: -9999px; top: 0; z-index: 100;
-  background: var(--accent); color: #fff; padding: 0.6rem 1rem;
+  background: var(--ink); color: #fff; padding: 0.6rem 1rem;
   border-radius: 0 0 var(--radius) 0;
 }
 .skip-link:focus { left: 0; }
 
 a { color: var(--accent-deep); }
+/* White focus ring on the black header and CTA band. */
+.app-header :focus-visible, .cta-band :focus-visible { outline-color: #ffffff; }
 
 .app-header {
-  padding: 1.5rem 1.5rem 0.5rem;
+  padding: clamp(2.25rem, 6vw, 3.5rem) 1.5rem;
   text-align: center;
+  background: var(--ink); color: #ffffff;
+  border-bottom: 3px solid var(--ink);
 }
 .app-byline {
-  font-size: 0.82rem; font-weight: 600; letter-spacing: 0.02em;
-  text-transform: uppercase; margin-bottom: 0.5rem;
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500; letter-spacing: 0.18em;
+  text-transform: uppercase; margin-bottom: 0.85rem; color: var(--yellow);
 }
-.app-byline a { color: var(--text-3); text-decoration: none; }
-.app-byline a:hover { color: var(--accent-deep); }
+.app-byline a { color: #ffffff; text-decoration: underline; }
+.app-byline a:hover { color: var(--yellow); }
 .app-title {
-  font-family: var(--font-display); font-weight: 800;
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-family: var(--font-display); font-weight: 800; text-transform: uppercase;
+  font-size: clamp(1.9rem, 5vw, 3rem); letter-spacing: -0.03em; line-height: 0.98;
+  color: #ffffff;
 }
 .app-subtitle {
-  color: var(--text-2); margin-top: 0.5rem; font-size: 1.05rem;
+  color: #d8d8d6; margin-top: 0.75rem; font-size: 1.05rem;
 }
 
 .app-main {
@@ -79,10 +86,10 @@ a { color: var(--accent-deep); }
 .url-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .scan-button {
   font-family: var(--font-body); font-weight: 700; font-size: 1rem;
-  color: #fff; background: var(--accent-deep); border: none;
+  color: #141414; background: var(--yellow); border: 1.5px solid var(--accent-deep);
   padding: 0.75rem 1.5rem; border-radius: var(--radius); cursor: pointer;
 }
-.scan-button:hover:not(:disabled) { background: #6f3200; }
+.scan-button:hover:not(:disabled) { background: var(--yellow-deep); }
 .scan-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .url-hint { font-size: 0.85rem; color: var(--text-3); }
 
@@ -260,6 +267,8 @@ a { color: var(--accent-deep); }
 }
 .btn-secondary:hover:not(:disabled) { background: var(--accent-bg); }
 .btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
+.cta-band .btn-secondary { color: #ffffff; border-color: #ffffff; }
+.cta-band .btn-secondary:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
 .export-error { color: var(--critical); font-size: 0.85rem; }
 
 /* --- Digital VPAT --- */
@@ -295,22 +304,24 @@ a { color: var(--accent-deep); }
 .pass-card-meta { color: var(--text-3); font-size: 0.82rem; margin-top: 0.15rem; }
 
 .cta-band {
-  background: var(--accent-bg); border: 1px solid var(--accent-border);
-  border-radius: var(--radius-lg); padding: 1.5rem; text-align: center;
+  background: var(--ink); color: #ffffff; border: 3px solid var(--ink);
+  border-radius: var(--radius-lg); padding: 2rem 1.5rem; text-align: center;
   display: flex; flex-direction: column; gap: 0.75rem; align-items: center;
 }
-.cta-band h2 { font-family: var(--font-display); font-size: 1.2rem; }
-.cta-band p { color: var(--text-2); max-width: 46ch; }
+.cta-band h2 { font-family: var(--font-display); font-weight: 800; text-transform: uppercase; letter-spacing: -0.02em; font-size: clamp(1.3rem, 3vw, 1.8rem); color: #ffffff; }
+.cta-band p { color: #d8d8d6; max-width: 46ch; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-body);
-  font-weight: 700; font-size: 0.95rem; color: #fff; background: var(--accent-deep);
-  border: none; padding: 0.75rem 1.5rem; border-radius: var(--radius);
+  font-weight: 700; font-size: 0.95rem; color: #141414; background: var(--yellow);
+  border: 1.5px solid var(--accent-deep); padding: 0.75rem 1.5rem; border-radius: var(--radius);
   cursor: pointer; text-decoration: none;
 }
-.btn-primary:hover { background: #6f3200; }
+.btn-primary:hover { background: var(--yellow-deep); }
 
 .cta-lead-form { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 0.4rem; }
-.cta-lead-label { font-size: 0.82rem; color: var(--text-2); }
+.cta-lead-label { font-size: 0.82rem; color: #d8d8d6; }
+.cta-band .cta-lead-success { color: #6ee7a0; }
+.cta-band .cta-lead-error { color: #ff9b9b; }
 .cta-lead-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .cta-lead-row input {
   flex: 1 1 200px; font-family: var(--font-body); font-size: 0.95rem;
