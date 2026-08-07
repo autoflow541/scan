@@ -54,6 +54,7 @@ export default function PageScreenshot({ screenshot, issues }) {
           markers.map((m) => (
             <div
               key={m.key}
+              aria-hidden="true"
               className={`page-screenshot-box page-screenshot-box--${m.impact}`}
               style={{
                 left: `${(m.bbox.x / size.w) * 100}%`,

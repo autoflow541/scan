@@ -15,7 +15,7 @@ export default function IssueList({ issues, incompleteCount }) {
         <p>No automated WCAG violations found on this page. Nice work!</p>
         {incompleteCount > 0 && (
           <p className="incomplete-note">
-            {incompleteCount} item{incompleteCount === 1 ? "" : "s"} need manual review to fully confirm.
+            {incompleteCount} item{incompleteCount === 1 ? "" : "s"} need{incompleteCount === 1 ? "s" : ""} manual review to fully confirm.
           </p>
         )}
       </div>
@@ -41,7 +41,7 @@ export default function IssueList({ issues, incompleteCount }) {
       ))}
       {incompleteCount > 0 && (
         <p className="incomplete-note">
-          {incompleteCount} additional item{incompleteCount === 1 ? "" : "s"} need manual review.
+          {incompleteCount} additional item{incompleteCount === 1 ? "" : "s"} need{incompleteCount === 1 ? "s" : ""} manual review.
         </p>
       )}
     </div>

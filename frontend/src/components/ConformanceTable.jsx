@@ -21,7 +21,7 @@ function CoverageSummary({ vpatRows }) {
       </p>
       {gaps.length > 0 && (
         <details className="coverage-gaps">
-          <summary>{gaps.length} criteria need manual review -- not automatically checked</summary>
+          <summary>{gaps.length} {gaps.length === 1 ? "criterion needs" : "criteria need"} manual review -- not automatically checked</summary>
           <ul className="coverage-gaps-list">
             {gaps.map((g) => (
               <li key={g.num}>

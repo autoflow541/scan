@@ -32,7 +32,7 @@ export default function UrlForm({ onSubmit, disabled }) {
 
   return (
     <form className="url-form" onSubmit={handleSubmit}>
-      <label htmlFor="scan-url" className="sr-only" style={{ position: "absolute", left: "-9999px" }}>
+      <label htmlFor="scan-url" className="sr-only">
         URL to scan
       </label>
       <input
@@ -45,12 +45,13 @@ export default function UrlForm({ onSubmit, disabled }) {
         onChange={(e) => setValue(e.target.value)}
         disabled={disabled}
         aria-invalid={touched && !valid}
+        aria-describedby={touched && !valid ? "scan-url-error" : undefined}
       />
       <button type="submit" className="scan-button" disabled={disabled}>
         {disabled ? "Scanning..." : "Scan this page"}
       </button>
       {touched && !valid && (
-        <p className="url-hint" role="alert">Enter a full URL, e.g. https://example.com</p>
+        <p id="scan-url-error" className="url-hint" role="alert">Enter a full URL, e.g. https://example.com</p>
       )}
     </form>
   );

@@ -57,7 +57,7 @@ export default function App() {
                 <p className="page-title">{result.page_title || "Untitled page"}</p>
                 <p className="page-url">{result.final_url}</p>
                 <div className="results-counts">
-                  {COUNT_ORDER.filter((k) => result.counts[k] > 0).map((k) => (
+                  {COUNT_ORDER.filter((k) => result.counts?.[k] > 0).map((k) => (
                     <span className={`count-pill count-pill--${k}`} key={k}>
                       {result.counts[k]} {k}
                     </span>

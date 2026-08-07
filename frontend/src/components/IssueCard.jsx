@@ -22,7 +22,7 @@ export default function IssueCard({ issue }) {
               {node.mobile_only && <span className="mobile-only-badge">Mobile only</span>}
               <code>{node.html}</code>
               {node.failure_summary && (
-                <p style={{ marginTop: "0.4rem", color: "var(--text-3)" }}>{node.failure_summary}</p>
+                <p className="issue-node-summary">{node.failure_summary}</p>
               )}
             </div>
           ))}

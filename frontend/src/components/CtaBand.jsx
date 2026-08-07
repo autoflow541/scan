@@ -74,13 +74,15 @@ export default function CtaBand({ score, scannedUrl }) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={status === "submitting"}
+              aria-invalid={status === "error"}
+              aria-describedby={status === "error" ? "cta-lead-error" : undefined}
             />
             <button type="submit" className="btn-secondary" disabled={status === "submitting"}>
               {status === "submitting" ? "Sending..." : "Contact me"}
             </button>
           </div>
           {status === "error" && (
-            <p className="cta-lead-error" role="alert">{errorMessage}</p>
+            <p id="cta-lead-error" className="cta-lead-error" role="alert">{errorMessage}</p>
           )}
         </form>
       )}
