@@ -17,10 +17,12 @@ from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 
+from .ai_page_review import run_ai_page_review
+from .ai_page_review import _is_enabled as _ai_review_enabled
 from .axe_source import load_axe_source
 from .conformance import build_conformance
 from .contrast_check import evaluate_contrast
-from .models import Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult, VpatRow
+from .models import AiReview, Bbox, ConformanceRow, Issue, IssueNode, PassItem, ScanResult, VpatRow
 from .scoring import compute_score
 from .state_checks import run_state_checks
 from .url_safety import revalidate_landed_host, safe_resolve_target
@@ -120,6 +122,22 @@ _TEXT_STYLE_SCRIPT = """
 
 _MAX_CONTRAST_NODES_TO_RESOLVE = 30
 
+# Cheap DOM context for the optional AI page review (ai_page_review.py) --
+# only text already in the page, no extra rendering. The module itself bounds
+# how much of each list actually goes into the AI prompt.
+_PAGE_CONTEXT_SCRIPT = """
+() => {
+  const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+    .map((h) => h.textContent.trim()).filter(Boolean);
+  const altTexts = Array.from(document.querySelectorAll('img[alt]'))
+    .map((img) => img.getAttribute('alt')).filter((a) => a && a.trim());
+  const linkTexts = Array.from(document.querySelectorAll('a[href]'))
+    .map((a) => (a.textContent || a.getAttribute('aria-label') || '').trim())
+    .filter(Boolean);
+  return { headings, altTexts, linkTexts };
+}
+"""
+
 
 class ScanTimeoutError(Exception):
     """The scan did not complete within the allotted time."""
@@ -189,6 +207,7 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             for bucket in ("violations", "passes", "incomplete"):
                 axe_results.setdefault(bucket, []).extend(state.get(bucket, []))
             bboxes = await _compute_bboxes(page, axe_results.get("violations", []))
+            ai_review = await _run_ai_review_if_enabled(page, screenshot_bytes)
             page_title = await page.title()
             final_url = page.url
         finally:
@@ -200,7 +219,7 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
         else None
     )
     duration_ms = int((time.monotonic() - t0) * 1000)
-    return _build_scan_result(url, final_url, page_title, axe_results, duration_ms, bboxes, screenshot)
+    return _build_scan_result(url, final_url, page_title, axe_results, duration_ms, bboxes, screenshot, ai_review)
 
 
 async def _new_context(browser, *, browser_like: bool):
@@ -367,6 +386,28 @@ async def _capture_screenshot_bytes(page: Page) -> bytes | None:
         return None
 
 
+async def _run_ai_review_if_enabled(page: Page, screenshot_bytes: bytes | None) -> dict | None:
+    """Extract cheap DOM context and run the optional AI page review. Skips
+    the DOM-extraction eval entirely when the feature is off (the default) --
+    not just skipping the API call -- so a disabled feature costs nothing.
+    Best-effort like every other enrichment step here: any failure just means
+    no AI review for this scan, never a failed scan.
+    """
+    if not _ai_review_enabled():
+        return None
+    try:
+        context = await page.evaluate(_PAGE_CONTEXT_SCRIPT)
+    except PlaywrightError as exc:
+        log.debug("AI review DOM-context extraction failed: %s", exc)
+        return None
+    return await run_ai_page_review(
+        screenshot_bytes,
+        context.get("headings", []),
+        context.get("altTexts", []),
+        context.get("linkTexts", []),
+    )
+
+
 async def _resolve_incomplete_contrast(
     page: Page, axe_results: dict, screenshot_bytes: bytes | None
 ) -> dict:
@@ -492,6 +533,7 @@ def _build_scan_result(
     duration_ms: int,
     bboxes: dict[str, dict],
     screenshot: str | None,
+    ai_review: dict | None = None,
 ) -> ScanResult:
     violations = axe_results.get("violations", [])
     passes = axe_results.get("passes", [])
@@ -563,6 +605,7 @@ def _build_scan_result(
         incomplete_count=len(incomplete),
         scan_duration_ms=duration_ms,
         screenshot=screenshot,
+        ai_review=AiReview(**ai_review) if ai_review else None,
     )
 
 

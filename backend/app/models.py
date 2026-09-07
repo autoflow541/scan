@@ -75,6 +75,28 @@ class VpatRow(BaseModel):
     remarks: str = Field(max_length=2000)
 
 
+class AiFinding(BaseModel):
+    criterion: str  # "1.1.1" | "2.4.4" | "2.4.6" -- see ai_page_review.py
+    verdict: str  # "ok" | "concern"
+    subject: str = Field(max_length=500)
+    detail: str = Field(max_length=1000)
+
+
+class AiReview(BaseModel):
+    """Optional, opt-in (AI_PAGE_REVIEW=on) AI-assisted judgment on criteria
+    axe-core can only check mechanically -- see ai_page_review.py. This is
+    NEVER a conformance determination and never changes the VpatRow entries
+    above; it's a separate, clearly-disclosed layer."""
+    summary: str = Field(max_length=500)
+    findings: list[AiFinding] = Field(default_factory=list, max_length=60)
+    model: str
+    input_tokens: int = Field(alias="inputTokens", default=0)
+    output_tokens: int = Field(alias="outputTokens", default=0)
+    disclaimer: str = Field(max_length=500)
+
+    model_config = {"populate_by_name": True}
+
+
 class ScanResult(BaseModel):
     url: str
     final_url: str
@@ -93,3 +115,6 @@ class ScanResult(BaseModel):
     incomplete_count: int
     scan_duration_ms: int
     screenshot: str | None = Field(default=None, max_length=15_000_000)
+    # Optional, opt-in AI-assisted judgment (see ai_page_review.py). None
+    # when disabled/unconfigured/unavailable -- never affects vpat/conformance.
+    ai_review: AiReview | None = None

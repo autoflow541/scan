@@ -3,3 +3,6 @@ uvicorn[standard]==0.34.0
 playwright==1.49.0
 pydantic>=2.9
 Pillow>=10.4
+# Optional AI-assisted page review (ai_page_review.py) -- off by default
+# (AI_PAGE_REVIEW=on to enable). Degrades gracefully if unset/uninstalled.
+anthropic>=0.40.0
