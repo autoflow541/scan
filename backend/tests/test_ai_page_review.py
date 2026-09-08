@@ -286,6 +286,50 @@ def test_explicit_timeout_s_overrides_the_default(monkeypatch):
     assert result is None
 
 
+def test_over_daily_usd_budget_skips_without_a_call(monkeypatch):
+    """The daily $ ceiling gates the call before the API key check -- even a
+    fully-configured, otherwise-healthy call site must short-circuit once
+    the process-wide budget is exhausted."""
+    import app.ai_budget as budget_mod
+    calls = {"n": 0}
+
+    class _CountingMessages:
+        async def create(self, **kwargs):
+            calls["n"] += 1
+            return _FakeResponse({"summary": "", "findings": []})
+
+    class _CountingClient:
+        def __init__(self, api_key=None):
+            self.messages = _CountingMessages()
+
+    monkeypatch.setenv("AI_PAGE_REVIEW", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-unused")
+    import anthropic
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", _CountingClient)
+
+    exhausted = budget_mod.DailyBudget(usd_budget=1.0)
+    exhausted.record("claude-sonnet-5", 1_000_000, 0)  # $3 > $1 budget
+    monkeypatch.setattr(budget_mod, "daily_budget", exhausted)
+
+    result = asyncio.run(run_ai_page_review(b"fakejpeg", ["Intro"], ["a photo"], ["Read more"]))
+    assert result is None
+    assert calls["n"] == 0
+
+
+def test_successful_call_records_spend_into_the_daily_budget(monkeypatch):
+    import app.ai_budget as budget_mod
+    fresh = budget_mod.DailyBudget(usd_budget=100.0)
+    monkeypatch.setattr(budget_mod, "daily_budget", fresh)
+
+    payload = {"summary": "ok", "findings": []}
+    _enable(monkeypatch, _FakeAsyncAnthropicClient(response=_FakeResponse(payload, inp=10_000, out=1_000)))
+
+    result = asyncio.run(run_ai_page_review(b"fakejpeg", ["Intro"], ["a photo"], ["Read more"]))
+
+    assert result is not None
+    assert fresh.spent_usd() > 0
+
+
 def test_too_little_budget_left_skips_without_a_call(monkeypatch):
     """A page that took most of the scan's budget to navigate/settle should
     skip the AI call outright rather than attempt a doomed-to-timeout one."""

@@ -25,6 +25,10 @@ Design boundaries (read before changing this file):
      degrades gracefully to "unavailable", never fails the scan itself.
   5. One page, one bounded call, Sonnet-tier -- never Opus (STRATEGY lesson
      from the PDF tool's cost incident applies here too).
+  6. A process-wide daily USD ceiling (ai_budget.py) gates every call before
+     the API key check -- rate_limit.py only slows a single IP down; nothing
+     else stops total spend across every IP from growing unbounded on a
+     public, opt-in-but-already-on endpoint. Same cost incident, same fix.
 """
 from __future__ import annotations
 
@@ -231,6 +235,11 @@ async def run_ai_page_review(
     """
     if not _is_enabled():
         return None
+    from .ai_budget import daily_budget
+    if daily_budget.over_budget():
+        log.warning("ai_page_review: daily AI budget exceeded ($%.2f spent) -- skipping call",
+                    daily_budget.spent_usd())
+        return None
     if screenshot_bytes is None:
         return None
     key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -293,9 +302,12 @@ async def run_ai_page_review(
         return None
 
     usage = getattr(response, "usage", None)
+    in_tok = int(getattr(usage, "input_tokens", 0) or 0)
+    out_tok = int(getattr(usage, "output_tokens", 0) or 0)
+    daily_budget.record(_MODEL, in_tok, out_tok)
     parsed["model"] = _MODEL
-    parsed["inputTokens"] = int(getattr(usage, "input_tokens", 0) or 0)
-    parsed["outputTokens"] = int(getattr(usage, "output_tokens", 0) or 0)
+    parsed["inputTokens"] = in_tok
+    parsed["outputTokens"] = out_tok
     parsed["disclaimer"] = (
         "AI-assisted preliminary judgment on alt text, link, and heading quality -- "
         "not a conformance determination. Does not affect the VPAT report above."
