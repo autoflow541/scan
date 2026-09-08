@@ -16,6 +16,7 @@ from app.ai_page_review import (
     parse_ai_response,
     run_ai_page_review,
     _is_enabled,
+    _resize_for_model,
 )
 
 
@@ -91,6 +92,36 @@ def test_is_enabled_recognises_on_values(monkeypatch):
         assert _is_enabled() is True
     monkeypatch.setenv("AI_PAGE_REVIEW", "off")
     assert _is_enabled() is False
+
+
+def _make_jpeg(width, height):
+    from PIL import Image
+    import io
+    img = Image.new("RGB", (width, height), color=(120, 130, 140))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_resize_shrinks_wide_screenshot():
+    from PIL import Image
+    import io
+    original = _make_jpeg(1280, 2000)  # a real full-page screenshot shape
+    resized = _resize_for_model(original)
+    img = Image.open(io.BytesIO(resized))
+    assert img.width == 900
+    assert img.height == round(2000 * 900 / 1280)
+    assert len(resized) < len(original)
+
+
+def test_resize_leaves_already_small_screenshot_unchanged():
+    original = _make_jpeg(600, 400)
+    assert _resize_for_model(original) == original
+
+
+def test_resize_falls_back_to_original_on_bad_input():
+    garbage = b"not an image"
+    assert _resize_for_model(garbage) == garbage
 
 
 # ── async orchestration ──────────────────────────────────────────────────────

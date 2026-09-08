@@ -36,7 +36,16 @@ log = logging.getLogger(__name__)
 
 _MODEL = os.environ.get("AI_PAGE_REVIEW_MODEL", "claude-sonnet-5")
 _MAX_TOKENS = 1200
-_CALL_TIMEOUT_S = 10.0
+# 10s was measured too tight against a REAL Sonnet vision + json_schema call
+# on a real full-page screenshot (timed out on every live scan tried) --
+# main.py's overall scan budget is 35s and the non-AI portion of a scan
+# typically finishes in under 10s, leaving real headroom here.
+_CALL_TIMEOUT_S = 18.0
+# A full-page screenshot can be well over 1000px tall; resizing the copy sent
+# to the model (not the one shown to the user / used for contrast sampling)
+# cuts both latency and cost with no real loss of judgment quality -- alt
+# text, link purpose, and heading legibility don't need full resolution.
+_MAX_IMAGE_WIDTH = 900
 # Bounds on how much DOM context goes into the prompt -- keeps the request
 # small/cheap/fast regardless of how large the scanned page is.
 _MAX_HEADINGS = 20
@@ -105,6 +114,29 @@ def _has_any_context(context: dict) -> bool:
     return bool(context.get("headings") or context.get("altTexts") or context.get("linkTexts"))
 
 
+def _resize_for_model(screenshot_bytes: bytes) -> bytes:
+    """Downscale a screenshot to _MAX_IMAGE_WIDTH before sending it to the
+    model -- cuts latency and cost with no real loss of judgment quality for
+    alt-text/link/heading legibility. Falls back to the original bytes on any
+    decode failure (never let an image-processing hiccup block the call)."""
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(screenshot_bytes))
+        if img.width <= _MAX_IMAGE_WIDTH:
+            return screenshot_bytes
+        ratio = _MAX_IMAGE_WIDTH / img.width
+        resized = img.convert("RGB").resize(
+            (_MAX_IMAGE_WIDTH, max(1, round(img.height * ratio))), Image.LANCZOS,
+        )
+        buf = io.BytesIO()
+        resized.save(buf, format="JPEG", quality=70)
+        return buf.getvalue()
+    except Exception as exc:
+        log.debug("ai_page_review: screenshot resize failed, using original: %s", exc)
+        return screenshot_bytes
+
+
 def parse_ai_response(text: str) -> dict | None:
     """Parse and lightly validate the model's JSON output. Returns None (not
     a raised exception) on any malformed response -- the caller treats that
@@ -157,12 +189,13 @@ async def run_ai_page_review(
     import asyncio
     import base64
 
+    model_image = _resize_for_model(screenshot_bytes)
     content: list[dict] = [
         {"type": "text", "text": "Page render:"},
         {
             "type": "image",
             "source": {"type": "base64", "media_type": "image/jpeg",
-                       "data": base64.standard_b64encode(screenshot_bytes).decode()},
+                       "data": base64.standard_b64encode(model_image).decode()},
         },
         {"type": "text", "text": "Page content to judge:\n" + json.dumps(context, ensure_ascii=False)},
     ]
