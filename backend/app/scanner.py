@@ -31,6 +31,18 @@ from .wcag_map import primary_criterion
 
 log = logging.getLogger(__name__)
 
+# main.py wraps run_scan in asyncio.wait_for(timeout=35.0) -- kept as an
+# independent, deliberately-lower constant here (not imported from main.py)
+# so the AI call's dynamic budget always leaves real slack under that outer
+# ceiling, rather than the two constants needing to be kept in exact sync.
+# A real Sonnet vision + json_schema call on a genuinely complex full-page
+# screenshot has measured up to ~20s -- a fixed allowance stacked on top of
+# the rest of the scan's (variable) duration could exceed the outer timeout;
+# computing "whatever's actually left" avoids that regardless of how long
+# navigation/axe/state-checks took for this particular page.
+_SCAN_BUDGET_CEILING_S = 32.0
+_AI_SAFETY_MARGIN_S = 2.0
+
 _MAX_NODES_PER_ISSUE = 5
 _MAX_HTML_CHARS = 300
 _AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"]
@@ -218,7 +230,11 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
         finally:
             await browser.close()
 
-    ai_review = await _run_ai_review_if_enabled(ai_context, screenshot_bytes)
+    # Dynamic budget: whatever's actually left of the scan's overall ceiling,
+    # not a fixed allowance -- so a page that was slow to navigate/settle
+    # doesn't let the AI call push the whole request past main.py's timeout.
+    ai_timeout = _SCAN_BUDGET_CEILING_S - (time.monotonic() - t0) - _AI_SAFETY_MARGIN_S
+    ai_review = await _run_ai_review_if_enabled(ai_context, screenshot_bytes, ai_timeout)
 
     screenshot = (
         f"data:image/jpeg;base64,{base64.b64encode(screenshot_bytes).decode()}"
@@ -411,11 +427,17 @@ async def _extract_ai_review_context(page: Page) -> dict | None:
         return None
 
 
-async def _run_ai_review_if_enabled(context: dict | None, screenshot_bytes: bytes | None) -> dict | None:
+async def _run_ai_review_if_enabled(
+    context: dict | None, screenshot_bytes: bytes | None, timeout_s: float,
+) -> dict | None:
     """Run the optional AI page review from already-extracted context. Split
     from extraction (above) so the network call runs after the browser has
-    closed -- measured meaningfully faster and more reliable that way than
-    interleaved with an open Chromium process on the same event loop.
+    closed -- freeing Chromium's resources before the heaviest remaining step,
+    which is a real improvement regardless. (Turned out NOT to be the main
+    latency factor, though: a genuinely complex full-page screenshot measured
+    ~18-20s for a real Sonnet vision + json_schema call even with the browser
+    already closed -- see run_scan's dynamic timeout computation, the actual
+    fix for that.)
     """
     if context is None:
         return None
@@ -424,6 +446,7 @@ async def _run_ai_review_if_enabled(context: dict | None, screenshot_bytes: byte
         context.get("headings", []),
         context.get("altTexts", []),
         context.get("linkTexts", []),
+        timeout_s=timeout_s,
     )
 
 

@@ -155,18 +155,30 @@ def parse_ai_response(text: str) -> dict | None:
     return {"summary": str(parsed.get("summary", ""))[:500], "findings": findings}
 
 
+# Below this, attempting the call isn't worth it -- a real Sonnet vision +
+# json_schema call on a genuinely complex full-page screenshot has measured
+# up to ~20s (see scanner.py's call site, which computes a dynamic timeout
+# from however much of the scan's overall budget is actually left rather
+# than assuming a fixed allowance).
+_MIN_USEFUL_TIMEOUT_S = 5.0
+
+
 async def run_ai_page_review(
     screenshot_bytes: bytes | None,
     headings: list[str],
     alt_texts: list[str],
     link_texts: list[str],
+    timeout_s: float | None = None,
 ) -> dict | None:
     """Best-effort AI review of alt-text/link/heading quality. Returns None
     when disabled, unconfigured, or on any failure -- the caller (scanner.py)
     treats None as "no AI review available" and the scan proceeds unaffected.
 
-    Never raises. Bounded to _CALL_TIMEOUT_S so a slow model response can't
-    meaningfully eat into main.py's overall scan timeout.
+    Never raises. Bounded to ``timeout_s`` (default _CALL_TIMEOUT_S) so a slow
+    model response can't meaningfully eat into main.py's overall scan
+    timeout. Callers with their own time budget (scanner.py passes whatever
+    is actually left of the scan's overall ceiling) should pass it explicitly
+    rather than relying on the fixed default.
     """
     if not _is_enabled():
         return None
@@ -174,6 +186,11 @@ async def run_ai_page_review(
         return None
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
+        return None
+
+    effective_timeout = _CALL_TIMEOUT_S if timeout_s is None else timeout_s
+    if effective_timeout < _MIN_USEFUL_TIMEOUT_S:
+        log.info("ai_page_review: skipping -- only %.1fs left in the scan budget", effective_timeout)
         return None
 
     context = build_page_context(headings, alt_texts, link_texts)
@@ -210,10 +227,10 @@ async def run_ai_page_review(
                 output_config={"format": {"type": "json_schema", "schema": _SCHEMA}},
                 messages=[{"role": "user", "content": content}],
             ),
-            timeout=_CALL_TIMEOUT_S,
+            timeout=effective_timeout,
         )
     except asyncio.TimeoutError:
-        log.warning("ai_page_review: timed out after %.0fs", _CALL_TIMEOUT_S)
+        log.warning("ai_page_review: timed out after %.0fs", effective_timeout)
         return None
     except Exception as exc:
         log.warning("ai_page_review: API call failed: %s", exc)

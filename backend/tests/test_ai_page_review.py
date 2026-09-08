@@ -238,3 +238,43 @@ def test_slow_call_times_out_and_returns_none(monkeypatch):
     ))
     result = asyncio.run(run_ai_page_review(b"fakejpeg", ["Intro"], ["a photo"], ["Read more"]))
     assert result is None
+
+
+def test_explicit_timeout_s_overrides_the_default(monkeypatch):
+    """scanner.py passes a dynamically-computed remaining-budget timeout;
+    that value must actually govern the call, not the fixed default."""
+    _enable(monkeypatch, _FakeAsyncAnthropicClient(
+        response=_FakeResponse({"summary": "", "findings": []}), delay=0.2,
+    ))
+    # Default _CALL_TIMEOUT_S (18s) would easily cover a 0.2s delay; an
+    # explicit 0.05s override must NOT, proving the parameter is honoured.
+    result = asyncio.run(run_ai_page_review(
+        b"fakejpeg", ["Intro"], ["a photo"], ["Read more"], timeout_s=0.05,
+    ))
+    assert result is None
+
+
+def test_too_little_budget_left_skips_without_a_call(monkeypatch):
+    """A page that took most of the scan's budget to navigate/settle should
+    skip the AI call outright rather than attempt a doomed-to-timeout one."""
+    calls = {"n": 0}
+
+    class _CountingMessages:
+        async def create(self, **kwargs):
+            calls["n"] += 1
+            return _FakeResponse({"summary": "", "findings": []})
+
+    class _CountingClient:
+        def __init__(self, api_key=None):
+            self.messages = _CountingMessages()
+
+    monkeypatch.setenv("AI_PAGE_REVIEW", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-unused")
+    import anthropic
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", _CountingClient)
+
+    result = asyncio.run(run_ai_page_review(
+        b"fakejpeg", ["Intro"], ["a photo"], ["Read more"], timeout_s=1.0,
+    ))
+    assert result is None
+    assert calls["n"] == 0  # never even attempted the call

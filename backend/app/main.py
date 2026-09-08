@@ -94,7 +94,12 @@ async def _static_cache_headers(request: Request, call_next):
 _rate_limiter = RateLimiter(capacity=5, refill_per_sec=1 / 30)
 _scan_semaphore = asyncio.Semaphore(int(os.environ.get("MAX_CONCURRENT_SCANS", "3")))
 _SEMAPHORE_WAIT_S = 2.0
-_OVERALL_TIMEOUT_S = 35.0
+# scanner.py's optional AI review computes its own dynamic timeout from a
+# _SCAN_BUDGET_CEILING_S of 32s (deliberately independent of this constant,
+# not imported from it) -- kept a few seconds below this ceiling so the AI
+# call always finishes (success or its own timeout) with real slack before
+# this outer wait_for would otherwise 504 the whole request.
+_OVERALL_TIMEOUT_S = 38.0
 
 # /vpat and /issues.csv don't launch a browser (cheap string formatting), so
 # they get a more generous limit than /scan -- but unlike /scan they had NO
