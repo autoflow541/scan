@@ -35,7 +35,16 @@ import os
 log = logging.getLogger(__name__)
 
 _MODEL = os.environ.get("AI_PAGE_REVIEW_MODEL", "claude-sonnet-5")
-_MAX_TOKENS = 1200
+# 1200 was measured too low against a REAL page: the response was valid,
+# high-quality JSON that got cut off mid-string by the token cap, and the
+# resulting truncated JSON failed to parse -- silently, by parse_ai_response's
+# design, so this looked identical to "no findings" from the outside. A
+# single real alt text can legitimately run a few hundred characters (a
+# thorough logo/banner description), and the schema asks the model to echo
+# the judged text back verbatim in "subject" -- both directions of that get
+# more expensive on a genuinely content-rich page than a short test prompt
+# would suggest.
+_MAX_TOKENS = 3000
 # 10s was measured too tight against a REAL Sonnet vision + json_schema call
 # on a real full-page screenshot (timed out on every live scan tried) --
 # main.py's overall scan budget is 35s and the non-AI portion of a scan
@@ -51,6 +60,11 @@ _MAX_IMAGE_WIDTH = 900
 _MAX_HEADINGS = 20
 _MAX_IMAGES = 15
 _MAX_LINKS = 20
+# Per-item cap: a real alt text can legitimately run a few hundred characters
+# (a thorough logo/banner description); left uncapped, a handful of long ones
+# eat into the output-token budget twice over -- once as input context, again
+# when the schema asks the model to echo the judged text back in "subject".
+_MAX_ITEM_CHARS = 200
 
 _SCHEMA = {
     "type": "object",
@@ -99,14 +113,26 @@ def _is_enabled() -> bool:
     return os.environ.get("AI_PAGE_REVIEW", "off").lower() in ("on", "1", "true")
 
 
+def _clean_and_cap(items: list[str], max_count: int) -> list[str]:
+    out = []
+    for item in items:
+        if not item:
+            continue
+        s = item.strip()
+        if not s:
+            continue
+        out.append(s[:_MAX_ITEM_CHARS])
+    return out[:max_count]
+
+
 def build_page_context(headings: list[str], alt_texts: list[str], link_texts: list[str]) -> dict:
     """Bound and shape the DOM context sent to the model. Pure function, no
     I/O -- kept separate from extraction (a Playwright eval) so it's directly
     unit-testable."""
     return {
-        "headings": [h.strip() for h in headings if h and h.strip()][:_MAX_HEADINGS],
-        "altTexts": [a.strip() for a in alt_texts if a and a.strip()][:_MAX_IMAGES],
-        "linkTexts": [l.strip() for l in link_texts if l and l.strip()][:_MAX_LINKS],
+        "headings": _clean_and_cap(headings, _MAX_HEADINGS),
+        "altTexts": _clean_and_cap(alt_texts, _MAX_IMAGES),
+        "linkTexts": _clean_and_cap(link_texts, _MAX_LINKS),
     }
 
 

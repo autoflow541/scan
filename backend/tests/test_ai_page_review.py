@@ -44,6 +44,16 @@ def test_build_page_context_caps_each_list():
     assert len(ctx["linkTexts"]) == 20
 
 
+def test_build_page_context_truncates_long_items():
+    """A real alt text can legitimately run a few hundred characters (a
+    thorough logo/banner description) -- must be capped, not sent whole,
+    since the schema also asks the model to echo it back verbatim, doubling
+    the token cost of an uncapped string."""
+    long_alt = "A " * 300  # 600 chars
+    ctx = build_page_context(headings=[], alt_texts=[long_alt], link_texts=[])
+    assert len(ctx["altTexts"][0]) == 200
+
+
 def test_parse_ai_response_valid():
     raw = json.dumps({
         "summary": "Mostly fine.",
