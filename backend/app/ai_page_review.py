@@ -56,15 +56,25 @@ _CALL_TIMEOUT_S = 18.0
 # text, link purpose, and heading legibility don't need full resolution.
 _MAX_IMAGE_WIDTH = 900
 # Bounds on how much DOM context goes into the prompt -- keeps the request
-# small/cheap/fast regardless of how large the scanned page is.
-_MAX_HEADINGS = 20
-_MAX_IMAGES = 15
-_MAX_LINKS = 20
+# small/cheap/fast regardless of how large the scanned page is. Lowered from
+# 20/15/20: raising _MAX_TOKENS to avoid truncation (see that constant's
+# comment) let the model generate a genuinely longer response on a
+# content-dense real page -- which took proportionally longer to generate and
+# started timing out again at the higher budget. More output tokens allowed
+# does not make generation faster; the input side has to be bounded too, not
+# just the token ceiling.
+_MAX_HEADINGS = 10
+_MAX_IMAGES = 8
+_MAX_LINKS = 10
 # Per-item cap: a real alt text can legitimately run a few hundred characters
 # (a thorough logo/banner description); left uncapped, a handful of long ones
 # eat into the output-token budget twice over -- once as input context, again
 # when the schema asks the model to echo the judged text back in "subject".
 _MAX_ITEM_CHARS = 200
+# Hard ceiling on the schema's findings array (belt-and-suspenders alongside
+# the input caps above): bounds worst-case generation time/output tokens by
+# construction, regardless of how many candidate items were in the context.
+_MAX_FINDINGS = 15
 
 _SCHEMA = {
     "type": "object",
@@ -72,6 +82,7 @@ _SCHEMA = {
         "summary": {"type": "string"},
         "findings": {
             "type": "array",
+            "maxItems": _MAX_FINDINGS,
             "items": {
                 "type": "object",
                 "properties": {
@@ -106,7 +117,10 @@ verdict "ok" if it's genuinely fine, "concern" if it's missing meaning, misleadi
 generic (e.g. alt="image123.jpg", link text "click here", heading "Section 2"). Skip items \
 you can't confidently judge (illegible, ambiguous, or not visible in the render) rather than \
 guessing -- do not fabricate a verdict for a subject you're not confident about. Keep each \
-detail to one sentence. Only reference items actually in the provided lists."""
+detail to one sentence. Only reference items actually in the provided lists. You may report \
+at most 15 findings total -- if there are more judgeable items than that, prioritize the \
+clearest "concern" cases first (the ones most worth flagging), then fill any remaining slots \
+with "ok" examples."""
 
 
 def _is_enabled() -> bool:

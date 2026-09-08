@@ -17,6 +17,8 @@ from app.ai_page_review import (
     run_ai_page_review,
     _is_enabled,
     _resize_for_model,
+    _MAX_FINDINGS,
+    _SCHEMA,
 )
 
 
@@ -39,9 +41,15 @@ def test_build_page_context_caps_each_list():
         alt_texts=[f"a{i}" for i in range(50)],
         link_texts=[f"l{i}" for i in range(50)],
     )
-    assert len(ctx["headings"]) == 20
-    assert len(ctx["altTexts"]) == 15
-    assert len(ctx["linkTexts"]) == 20
+    assert len(ctx["headings"]) == 10
+    assert len(ctx["altTexts"]) == 8
+    assert len(ctx["linkTexts"]) == 10
+
+
+def test_schema_caps_findings_array_length():
+    """Belt-and-suspenders bound on worst-case output size/generation time --
+    the schema itself must enforce this, not just the input-side caps."""
+    assert _SCHEMA["properties"]["findings"]["maxItems"] == _MAX_FINDINGS
 
 
 def test_build_page_context_truncates_long_items():
