@@ -207,11 +207,18 @@ async def run_scan(url: str, *, nav_timeout_ms: int = 15_000, settle_timeout_ms:
             for bucket in ("violations", "passes", "incomplete"):
                 axe_results.setdefault(bucket, []).extend(state.get(bucket, []))
             bboxes = await _compute_bboxes(page, axe_results.get("violations", []))
-            ai_review = await _run_ai_review_if_enabled(page, screenshot_bytes)
+            # Only extraction (needs the live page) happens here; the actual
+            # AI network call runs after the browser closes below -- it has
+            # no dependency on the page, and measured meaningfully slower
+            # (occasionally timing out) while Chromium was still open,
+            # competing for the event loop/CPU/network on the same process.
+            ai_context = await _extract_ai_review_context(page)
             page_title = await page.title()
             final_url = page.url
         finally:
             await browser.close()
+
+    ai_review = await _run_ai_review_if_enabled(ai_context, screenshot_bytes)
 
     screenshot = (
         f"data:image/jpeg;base64,{base64.b64encode(screenshot_bytes).decode()}"
@@ -386,19 +393,31 @@ async def _capture_screenshot_bytes(page: Page) -> bytes | None:
         return None
 
 
-async def _run_ai_review_if_enabled(page: Page, screenshot_bytes: bytes | None) -> dict | None:
-    """Extract cheap DOM context and run the optional AI page review. Skips
-    the DOM-extraction eval entirely when the feature is off (the default) --
-    not just skipping the API call -- so a disabled feature costs nothing.
-    Best-effort like every other enrichment step here: any failure just means
-    no AI review for this scan, never a failed scan.
+async def _extract_ai_review_context(page: Page) -> dict | None:
+    """Extract cheap DOM context (headings/alt-texts/link-texts) for the
+    optional AI page review, while the page is still alive. Skips the eval
+    entirely when the feature is off (the default) -- not just skipping the
+    API call later -- so a disabled feature costs nothing. Returns None on
+    any failure or when disabled; the actual API call happens separately,
+    after the browser closes (see run_scan) -- this function has no network
+    dependency of its own.
     """
     if not _ai_review_enabled():
         return None
     try:
-        context = await page.evaluate(_PAGE_CONTEXT_SCRIPT)
+        return await page.evaluate(_PAGE_CONTEXT_SCRIPT)
     except PlaywrightError as exc:
         log.debug("AI review DOM-context extraction failed: %s", exc)
+        return None
+
+
+async def _run_ai_review_if_enabled(context: dict | None, screenshot_bytes: bytes | None) -> dict | None:
+    """Run the optional AI page review from already-extracted context. Split
+    from extraction (above) so the network call runs after the browser has
+    closed -- measured meaningfully faster and more reliable that way than
+    interleaved with an open Chromium process on the same event loop.
+    """
+    if context is None:
         return None
     return await run_ai_page_review(
         screenshot_bytes,
