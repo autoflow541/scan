@@ -46,10 +46,24 @@ def test_build_page_context_caps_each_list():
     assert len(ctx["linkTexts"]) == 10
 
 
-def test_schema_caps_findings_array_length():
-    """Belt-and-suspenders bound on worst-case output size/generation time --
-    the schema itself must enforce this, not just the input-side caps."""
-    assert _SCHEMA["properties"]["findings"]["maxItems"] == _MAX_FINDINGS
+def test_schema_does_not_use_unsupported_max_items():
+    """Anthropic's structured-output schema rejects maxItems on arrays
+    (confirmed live: 400 invalid_request_error) -- must never be reintroduced
+    here, or every AI review call fails outright."""
+    assert "maxItems" not in _SCHEMA["properties"]["findings"]
+
+
+def test_parse_ai_response_trims_findings_to_max():
+    """_MAX_FINDINGS is prompt-level guidance only now (not schema-enforced,
+    see above) -- parse_ai_response must still defensively cap it if the
+    model overshoots."""
+    findings = [
+        {"criterion": "1.1.1", "verdict": "ok", "subject": f"item{i}", "detail": "d"}
+        for i in range(_MAX_FINDINGS + 5)
+    ]
+    raw = json.dumps({"summary": "s", "findings": findings})
+    parsed = parse_ai_response(raw)
+    assert len(parsed["findings"]) == _MAX_FINDINGS
 
 
 def test_build_page_context_truncates_long_items():

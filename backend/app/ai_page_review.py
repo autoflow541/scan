@@ -82,7 +82,13 @@ _SCHEMA = {
         "summary": {"type": "string"},
         "findings": {
             "type": "array",
-            "maxItems": _MAX_FINDINGS,
+            # NOTE: Anthropic's structured-output schema does NOT support
+            # maxItems on arrays (confirmed live: 400 invalid_request_error,
+            # "property 'maxItems' is not supported") -- the _MAX_FINDINGS
+            # ceiling is prompt-level only (see _INSTRUCTIONS), reinforced by
+            # the lower _MAX_HEADINGS/_MAX_IMAGES/_MAX_LINKS input caps above,
+            # not schema-enforced. parse_ai_response still trims defensively
+            # in case the model overshoots it anyway.
             "items": {
                 "type": "object",
                 "properties": {
@@ -192,7 +198,10 @@ def parse_ai_response(text: str) -> dict | None:
         if isinstance(f, dict) and f.get("criterion") in ("1.1.1", "2.4.4", "2.4.6")
         and f.get("verdict") in ("ok", "concern")
     ]
-    return {"summary": str(parsed.get("summary", ""))[:500], "findings": findings}
+    # _MAX_FINDINGS is prompt-level guidance only (Anthropic's structured-
+    # output schema doesn't support maxItems on arrays -- see _SCHEMA) --
+    # trim defensively in case the model overshoots it anyway.
+    return {"summary": str(parsed.get("summary", ""))[:500], "findings": findings[:_MAX_FINDINGS]}
 
 
 # Below this, attempting the call isn't worth it -- a real Sonnet vision +
