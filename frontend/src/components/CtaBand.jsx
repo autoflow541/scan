@@ -68,7 +68,7 @@ export default function CtaBand({ score, scannedUrl, issues }) {
     <div className="cta-band">
       <h2>{heading}</h2>
       <p>{body}</p>
-      <a className="btn-primary" href="https://auto-flow.co" target="_blank" rel="noopener noreferrer">
+      <a className="btn-primary" href="https://auto-flow.co/contact.html?source=scanner" target="_blank" rel="noopener noreferrer">
         Request a full audit
       </a>
 
