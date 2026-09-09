@@ -253,7 +253,10 @@ async def lead(req: LeadRequest, request: Request) -> dict:
     except InvalidEmailError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        record_lead(email=email, scanned_url=req.scanned_url, score=req.score, client_ip=client_ip)
+        record_lead(
+            email=email, scanned_url=req.scanned_url, score=req.score,
+            client_ip=client_ip, top_issues=req.top_issues,
+        )
     except OSError:
         raise HTTPException(status_code=500, detail="Couldn't save that right now. Please try again shortly.")
     return {"status": "ok"}

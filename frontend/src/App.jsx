@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { scanUrl } from "./api.js";
+import { trackEvent } from "./analytics.js";
 import UrlForm from "./components/UrlForm.jsx";
 import LoadingState from "./components/LoadingState.jsx";
 import ScoreGauge from "./components/ScoreGauge.jsx";
@@ -22,13 +23,21 @@ export default function App() {
   async function handleSubmit(url) {
     setScreen("scanning");
     setError(null);
+    trackEvent("scan_started", { url });
     try {
       const data = await scanUrl(url);
       setResult(data);
       setScreen("results");
+      trackEvent("scan_completed", {
+        url: data.final_url || url,
+        score: data.score ?? null,
+        critical_count: data.counts?.critical || 0,
+        serious_count: data.counts?.serious || 0,
+      });
     } catch (e) {
       setError(e);
       setScreen("error");
+      trackEvent("scan_failed", { url, reason: e.message || "unknown" });
     }
   }
 
@@ -74,7 +83,7 @@ export default function App() {
           </>
         )}
 
-        <CtaBand score={result?.score} scannedUrl={result?.final_url} />
+        <CtaBand score={result?.score} scannedUrl={result?.final_url} issues={result?.issues} />
       </main>
 
       <footer className="app-footer">

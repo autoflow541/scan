@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { submitLead } from "../api.js";
+import { trackEvent } from "../analytics.js";
 
 // Copy is tailored to the actual score so the pitch reads as earned, not
 // boilerplate -- always honest about what automated testing can and can't
@@ -29,7 +30,20 @@ function pitchFor(score) {
   };
 }
 
-export default function CtaBand({ score, scannedUrl }) {
+// Worst-first, so a human following up sees the highest-impact findings --
+// the ones most worth leading a sales conversation with -- not whatever
+// happened to scan first.
+const IMPACT_ORDER = ["critical", "serious", "moderate", "minor"];
+
+function topIssuesFor(issues) {
+  if (!Array.isArray(issues)) return [];
+  return [...issues]
+    .sort((a, b) => IMPACT_ORDER.indexOf(a.impact) - IMPACT_ORDER.indexOf(b.impact))
+    .slice(0, 5)
+    .map((i) => `${i.impact}: ${i.help}`);
+}
+
+export default function CtaBand({ score, scannedUrl, issues }) {
   const { heading, body } = pitchFor(score);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("idle"); // idle | submitting | success | error
@@ -40,8 +54,10 @@ export default function CtaBand({ score, scannedUrl }) {
     setStatus("submitting");
     setErrorMessage("");
     try {
-      await submitLead({ email, scannedUrl, score: score ?? null });
+      const topIssues = topIssuesFor(issues);
+      await submitLead({ email, scannedUrl, score: score ?? null, topIssues });
       setStatus("success");
+      trackEvent("lead_submitted", { url: scannedUrl, score: score ?? null });
     } catch (err) {
       setErrorMessage(err.message || "Something went wrong. Please try again.");
       setStatus("error");

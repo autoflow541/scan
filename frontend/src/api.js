@@ -59,11 +59,14 @@ export function downloadJson(result) {
   triggerDownload(blob, "accessibility-scan.json");
 }
 
-export async function submitLead({ email, scannedUrl, score }) {
+export async function submitLead({ email, scannedUrl, score, topIssues }) {
   const res = await fetch("/lead", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, scanned_url: scannedUrl || "", score: score ?? null }),
+    body: JSON.stringify({
+      email, scanned_url: scannedUrl || "", score: score ?? null,
+      top_issues: topIssues || [],
+    }),
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) {

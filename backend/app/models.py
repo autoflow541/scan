@@ -14,6 +14,12 @@ class LeadRequest(BaseModel):
     email: str = Field(max_length=254)
     scanned_url: str = Field(max_length=2000)
     score: int | None = None
+    # Top issue titles from the scan the lead was submitted against, so a
+    # human following up has something concrete to reference instead of
+    # having to re-scan the page themselves. Client-supplied and therefore
+    # untrusted -- record_lead caps both list length and per-item length
+    # again server-side regardless of what's sent here.
+    top_issues: list[str] = Field(default_factory=list, max_length=10)
 
 
 class Bbox(BaseModel):

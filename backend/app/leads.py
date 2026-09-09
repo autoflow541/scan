@@ -40,14 +40,32 @@ def validate_email(email: str) -> str:
     return email
 
 
-def record_lead(*, email: str, scanned_url: str, score: int | None, client_ip: str) -> None:
+_MAX_TOP_ISSUES = 10
+_MAX_ISSUE_LENGTH = 200
+
+
+def record_lead(
+    *, email: str, scanned_url: str, score: int | None, client_ip: str,
+    top_issues: list[str] | None = None,
+) -> None:
     """Append one lead as a JSON line. Best-effort: a filesystem hiccup here
-    should never break the request for the person submitting the form."""
+    should never break the request for the person submitting the form.
+
+    top_issues carries the scan's own findings into the lead record, so
+    whoever follows up has something concrete to reference instead of
+    re-scanning the page themselves -- the actual "send this report to us"
+    the CTA copy already promises. Capped again here (list length and per-
+    item length) regardless of what the request schema already enforced --
+    never trust client input to stay within schema limits at the storage
+    layer too.
+    """
+    clean_issues = [str(i)[:_MAX_ISSUE_LENGTH] for i in (top_issues or [])][:_MAX_TOP_ISSUES]
     entry = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "email": email,
         "scanned_url": scanned_url,
         "score": score,
+        "top_issues": clean_issues,
         "ip": client_ip,
     }
     try:
