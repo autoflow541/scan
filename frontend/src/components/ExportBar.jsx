@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { downloadVpat, downloadIssuesCsv, downloadJson } from "../api.js";
+import { trackEvent } from "../analytics.js";
 
 export default function ExportBar({ result }) {
   const [busy, setBusy] = useState(null); // "vpat" | "csv" | "json" | null
@@ -10,6 +11,7 @@ export default function ExportBar({ result }) {
     setBusy(kind);
     try {
       await fn(result);
+      trackEvent("report_exported", { format: kind, url: result?.final_url, score: result?.score ?? null });
     } catch (e) {
       setError(e.message || "Export failed. Please try again.");
     } finally {
